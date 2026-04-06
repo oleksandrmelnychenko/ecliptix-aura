@@ -1,0 +1,11 @@
+[package]
+name = "aura-relay-ml"
+version.workspace = true
+edition.workspace = true
+description = "Relay-side ML inference: ONNX runtime, model routing, batching, calibration"
+
+[dependencies]
+aura-contracts = { path = "../aura-contracts" }
+aura-ml = { path = "../aura-ml", features = ["onnx"] }
+serde.workspace = true
+tracing.workspace = true

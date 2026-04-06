@@ -1,0 +1,10 @@
+[package]
+name = "aura-relay-observability"
+version.workspace = true
+edition.workspace = true
+description = "Relay observability: audit trails, tracing, metrics, drift monitoring"
+
+[dependencies]
+aura-contracts = { path = "../aura-contracts" }
+serde.workspace = true
+tracing.workspace = true

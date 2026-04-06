@@ -1,0 +1,11 @@
+[package]
+name = "aura-relay-policy"
+version.workspace = true
+edition.workspace = true
+description = "Relay response policy: confidence thresholds, privacy-safe explanations, return contracts"
+
+[dependencies]
+aura-contracts = { path = "../aura-contracts" }
+aura-relay-risk = { path = "../aura-relay-risk" }
+serde.workspace = true
+tracing.workspace = true

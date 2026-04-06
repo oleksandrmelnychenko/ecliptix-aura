@@ -1,0 +1,11 @@
+[package]
+name = "aura-relay-inference"
+version.workspace = true
+edition.workspace = true
+description = "Relay inference orchestration: ML routing, rule+ML fusion, fallback handling"
+
+[dependencies]
+aura-contracts = { path = "../aura-contracts" }
+aura-relay-intake = { path = "../aura-relay-intake" }
+serde.workspace = true
+tracing.workspace = true

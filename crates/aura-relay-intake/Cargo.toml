@@ -1,0 +1,10 @@
+[package]
+name = "aura-relay-intake"
+version.workspace = true
+edition.workspace = true
+description = "Relay intake: payload validation, privacy filters, normalization"
+
+[dependencies]
+aura-contracts = { path = "../aura-contracts" }
+serde.workspace = true
+tracing.workspace = true

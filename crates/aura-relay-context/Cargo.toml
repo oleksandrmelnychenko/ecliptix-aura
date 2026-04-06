@@ -1,0 +1,11 @@
+[package]
+name = "aura-relay-context"
+version.workspace = true
+edition.workspace = true
+description = "Relay context enrichment: cross-conversation memory, sender intelligence, coordination signals"
+
+[dependencies]
+aura-contracts = { path = "../aura-contracts" }
+aura-relay-store = { path = "../aura-relay-store" }
+serde.workspace = true
+tracing.workspace = true

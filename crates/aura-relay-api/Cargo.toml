@@ -1,0 +1,17 @@
+[package]
+name = "aura-relay-api"
+version.workspace = true
+edition.workspace = true
+description = "HTTP/gRPC ingress for AURA Relay: auth, rate limiting, request routing"
+
+[dependencies]
+aura-contracts = { path = "../aura-contracts" }
+aura-wire-relay = { path = "../aura-wire-relay" }
+aura-relay-intake = { path = "../aura-relay-intake" }
+aura-relay-inference = { path = "../aura-relay-inference" }
+aura-relay-risk = { path = "../aura-relay-risk" }
+aura-relay-policy = { path = "../aura-relay-policy" }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+thiserror.workspace = true

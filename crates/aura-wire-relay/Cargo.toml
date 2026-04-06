@@ -1,0 +1,10 @@
+[package]
+name = "aura-wire-relay"
+version.workspace = true
+edition.workspace = true
+description = "Versioned wire contract surface for AURA Agent <-> Relay"
+
+[dependencies]
+aura-contracts = { path = "../aura-contracts" }
+serde.workspace = true
+serde_json.workspace = true

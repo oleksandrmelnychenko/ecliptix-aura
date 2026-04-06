@@ -1,0 +1,12 @@
+[package]
+name = "aura-relay-risk"
+version.workspace = true
+edition.workspace = true
+description = "Relay risk fusion: score combination, stance interpretation, final typed findings"
+
+[dependencies]
+aura-contracts = { path = "../aura-contracts" }
+aura-relay-intake = { path = "../aura-relay-intake" }
+aura-relay-inference = { path = "../aura-relay-inference" }
+serde.workspace = true
+tracing.workspace = true

@@ -1,0 +1,11 @@
+[package]
+name = "aura-relay-store"
+version.workspace = true
+edition.workspace = true
+description = "Relay persistence: feature store, reputation cache, sender profiles"
+
+[dependencies]
+aura-contracts = { path = "../aura-contracts" }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
