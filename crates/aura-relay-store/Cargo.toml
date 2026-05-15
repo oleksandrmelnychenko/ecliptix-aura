@@ -8,4 +8,5 @@ description = "Relay persistence: feature store, reputation cache, sender profil
 aura-contracts = { path = "../aura-contracts" }
 serde.workspace = true
 serde_json.workspace = true
+thiserror.workspace = true
 tracing.workspace = true

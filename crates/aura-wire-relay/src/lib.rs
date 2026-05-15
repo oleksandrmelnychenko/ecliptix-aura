@@ -2,10 +2,16 @@
 
 pub mod v1alpha1 {
     pub use aura_contracts::{
-        default_relay_schema_version, AgentAnalyzeRequest, AgentCapabilities, ConfirmedEvent,
-        LocalContextSummary, MessageWindowEntry, RawObservation, RelayAnalyzeResponse,
-        RelayPrivacyMode, RemoteFinding, RemoteInferenceSummary, RiskHorizon, ThreatContextFrame,
-        AURA_RELAY_SCHEMA_VERSION,
+        default_relay_schema_version, sign_protected_account_token_attestation,
+        sign_relay_request_auth, sign_relay_response_auth,
+        verify_protected_account_token_attestation, verify_relay_request_auth,
+        verify_relay_response_auth, AgentAnalyzeRequest, AgentCapabilities,
+        ClientSafetyTelemetryEvent, ConfirmedEvent, LocalContextSummary, MessageWindowEntry,
+        ProtectedAccountTokenAttestation, RawObservation, RelayAnalyzeResponse, RelayPrivacyMode,
+        RelayRequestAuth, RelayResponseAuth, RemoteFinding, RemoteInferenceSummary, RiskHorizon,
+        SafetyTelemetryAction, SafetyTelemetrySeverity, SafetyTelemetrySurface, ThreatContextFrame,
+        AURA_RELAY_SCHEMA_VERSION, PROTECTED_ACCOUNT_TOKEN_ATTESTATION_ALG, RELAY_REQUEST_AUTH_ALG,
+        RELAY_RESPONSE_AUTH_ALG,
     };
 }
 

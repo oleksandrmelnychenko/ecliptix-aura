@@ -60,7 +60,11 @@ pub fn enrich_context(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aura_relay_store::InMemoryReputationStore;
+    use aura_contracts::{
+        ClientSafetyTelemetryEvent, Confidence, SafetyTelemetryAction, SafetyTelemetrySeverity,
+        SafetyTelemetrySurface,
+    };
+    use aura_relay_store::{InMemoryReputationStore, ReputationStore};
     use std::collections::HashMap;
 
     #[test]
@@ -81,6 +85,7 @@ mod tests {
             first_seen_ms: 1000,
             last_seen_ms: 5000,
             total_requests: 20,
+            ..SenderReputation::new("risky_user", 1000)
         });
 
         let enrichment = enrich_context("risky_user", &store);
@@ -89,5 +94,91 @@ mod tests {
             enrichment.cross_conversation_threat,
             Some(ThreatType::Manipulation)
         );
+    }
+
+    #[test]
+    fn enrichment_flags_repeated_privacy_safe_safety_telemetry() {
+        let mut store = InMemoryReputationStore::new();
+        let sender_token = "snd_01H00000000000000000000000".to_string();
+
+        for hour in 0..3 {
+            store.record_safety_telemetry(&ClientSafetyTelemetryEvent {
+                event_id: format!("evt_01H0000000000000000000000{hour}"),
+                sender_token: sender_token.clone(),
+                protected_account_token: format!("acct_01H000000000000000000000{hour}"),
+                conversation_token: Some(format!("conv_01H00000000000000000000{hour}")),
+                surface: SafetyTelemetrySurface::DirectMessage,
+                threat_type: ThreatType::Grooming,
+                severity: SafetyTelemetrySeverity::High,
+                confidence: Confidence::High,
+                action: SafetyTelemetryAction::Warn,
+                timestamp_bucket_ms: 1_778_652_000_000 + hour * 3_600_000,
+                reason_family: Some("grooming".to_string()),
+            });
+        }
+
+        let enrichment = enrich_context(&sender_token, &store);
+
+        assert!(enrichment.network_risk_signal >= 0.7);
+        assert_eq!(
+            enrichment.cross_conversation_threat,
+            Some(ThreatType::Manipulation)
+        );
+    }
+
+    #[test]
+    fn enrichment_does_not_flag_single_child_flood_as_cross_conversation_threat() {
+        let mut store = InMemoryReputationStore::new();
+        let sender_token = "snd_01H00000000000000000000000".to_string();
+
+        for hour in 0..48 {
+            store.record_safety_telemetry(&ClientSafetyTelemetryEvent {
+                event_id: format!("evt_single_child_flood_{hour:04}"),
+                sender_token: sender_token.clone(),
+                protected_account_token: "acct_01H0000000000000000000000".to_string(),
+                conversation_token: Some(format!("conv_single_child_flood_{hour:04}")),
+                surface: SafetyTelemetrySurface::DirectMessage,
+                threat_type: ThreatType::Grooming,
+                severity: SafetyTelemetrySeverity::Critical,
+                confidence: Confidence::High,
+                action: SafetyTelemetryAction::Warn,
+                timestamp_bucket_ms: 1_778_652_000_000 + hour * 3_600_000,
+                reason_family: Some("grooming".to_string()),
+            });
+        }
+
+        let enrichment = enrich_context(&sender_token, &store);
+
+        assert!(enrichment.network_risk_signal <= 0.64);
+        assert!(enrichment.network_risk_signal < 0.7);
+        assert!(enrichment.cross_conversation_threat.is_none());
+    }
+
+    #[test]
+    fn enrichment_does_not_flag_single_conversation_sybil_flood() {
+        let mut store = InMemoryReputationStore::new();
+        let sender_token = "snd_01H00000000000000000000000".to_string();
+
+        for hour in 0..48 {
+            store.record_safety_telemetry(&ClientSafetyTelemetryEvent {
+                event_id: format!("evt_single_conv_sybil_{hour:04}"),
+                sender_token: sender_token.clone(),
+                protected_account_token: format!("acct_single_conv_sybil_{hour:04}"),
+                conversation_token: Some("conv_single_conversation_sybil".to_string()),
+                surface: SafetyTelemetrySurface::DirectMessage,
+                threat_type: ThreatType::Grooming,
+                severity: SafetyTelemetrySeverity::Critical,
+                confidence: Confidence::High,
+                action: SafetyTelemetryAction::Warn,
+                timestamp_bucket_ms: 1_778_652_000_000 + hour * 3_600_000,
+                reason_family: Some("grooming".to_string()),
+            });
+        }
+
+        let enrichment = enrich_context(&sender_token, &store);
+
+        assert!(enrichment.network_risk_signal <= 0.58);
+        assert!(enrichment.network_risk_signal < 0.7);
+        assert!(enrichment.cross_conversation_threat.is_none());
     }
 }

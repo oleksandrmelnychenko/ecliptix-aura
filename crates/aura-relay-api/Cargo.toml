@@ -10,8 +10,14 @@ aura-wire-relay = { path = "../aura-wire-relay" }
 aura-relay-intake = { path = "../aura-relay-intake" }
 aura-relay-inference = { path = "../aura-relay-inference" }
 aura-relay-risk = { path = "../aura-relay-risk" }
+aura-relay-context = { path = "../aura-relay-context" }
 aura-relay-policy = { path = "../aura-relay-policy" }
+aura-relay-store = { path = "../aura-relay-store" }
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+aura-agent-core = { path = "../aura-agent-core" }
+aura-patterns = { path = "../aura-patterns" }

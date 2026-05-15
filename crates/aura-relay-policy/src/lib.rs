@@ -5,8 +5,8 @@
 //! relay response contract.
 
 use aura_contracts::{
-    default_relay_schema_version, RelayAnalyzeResponse, RemoteInferenceSummary,
-    RiskHorizon, ThreatType,
+    default_relay_schema_version, RelayAnalyzeResponse, RemoteInferenceSummary, RiskHorizon,
+    ThreatType,
 };
 use aura_relay_risk::RiskAssessment;
 
