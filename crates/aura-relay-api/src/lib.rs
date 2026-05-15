@@ -1812,8 +1812,8 @@ mod tests {
     use aura_contracts::{
         sign_protected_account_token_attestation, sign_relay_request_auth,
         verify_relay_request_auth, verify_relay_response_auth, ClientSafetyTelemetryEvent,
-        Confidence, RelayPrivacyMode, SafetyTelemetryAction, SafetyTelemetrySeverity,
-        SafetyTelemetrySurface,
+        Confidence, DetectionLayer, RawObservation, RelationshipTrustSource, RelayPrivacyMode,
+        SafetyTelemetryAction, SafetyTelemetrySeverity, SafetyTelemetrySurface, SenderRelationship,
     };
     use aura_patterns::PatternDatabase;
 
@@ -1828,6 +1828,35 @@ mod tests {
 
         let response = service.handle_analyze(request);
         assert_eq!(response.request_id, "test_1");
+    }
+
+    #[test]
+    fn relay_service_returns_relationship_context_markers() {
+        let service = RelayService::new();
+        let response = service.handle_analyze(AgentAnalyzeRequest {
+            request_id: "test_relationship_context".to_string(),
+            account_type: AccountType::Child,
+            sender_relationship: SenderRelationship::UnknownAdult,
+            relationship_trust_source: RelationshipTrustSource::ServerReputation,
+            local_observations: vec![RawObservation {
+                threat_type: ThreatType::Grooming,
+                layer: DetectionLayer::PatternMatching,
+                score: 0.47,
+                confidence: Confidence::Low,
+                reason_code: "local.grooming.seed".to_string(),
+                ..RawObservation::default()
+            }],
+            ..AgentAnalyzeRequest::default()
+        });
+
+        assert_eq!(response.request_id, "test_relationship_context");
+        assert!(response
+            .context_markers
+            .contains(&"relay.relationship.unknown_adult_minor".to_string()));
+        assert!(response
+            .reason_codes
+            .contains(&"relay.relationship.unknown_adult_minor".to_string()));
+        assert!(response.inference.expect("missing inference").score >= 0.55);
     }
 
     #[test]

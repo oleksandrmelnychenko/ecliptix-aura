@@ -59,6 +59,7 @@ mod tests {
             request_id: "req_1".to_string(),
             text: "test".to_string(),
             language: None,
+            account_type: Default::default(),
             sender_token: None,
             local_threat_hints: vec![ThreatType::Grooming],
             local_score: 0.85,

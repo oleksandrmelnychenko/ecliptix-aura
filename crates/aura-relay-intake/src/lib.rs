@@ -2,8 +2,8 @@
 //! agent requests before they reach inference.
 
 use aura_contracts::{
-    AgentAnalyzeRequest, ClientSafetyTelemetryEvent, RelationshipTrustSource, RelayPrivacyMode,
-    SenderRelationship, ThreatType,
+    AccountType, AgentAnalyzeRequest, ClientSafetyTelemetryEvent, RelationshipTrustSource,
+    RelayPrivacyMode, SenderRelationship, ThreatType,
 };
 
 #[derive(Debug, Clone)]
@@ -11,6 +11,7 @@ pub struct IntakeResult {
     pub request_id: String,
     pub text: String,
     pub language: Option<String>,
+    pub account_type: AccountType,
     pub sender_token: Option<String>,
     pub local_threat_hints: Vec<ThreatType>,
     pub local_score: f32,
@@ -50,6 +51,7 @@ pub fn validate_and_normalize(request: &AgentAnalyzeRequest) -> IntakeResult {
         request_id: request.request_id.clone(),
         text,
         language: request.language.clone(),
+        account_type: request.account_type,
         sender_token: request.privacy_safe_sender_token().map(str::to_string),
         local_threat_hints,
         local_score,
@@ -92,6 +94,7 @@ mod tests {
     #[test]
     fn relationship_metadata_is_preserved_as_typed_context() {
         let request = AgentAnalyzeRequest {
+            account_type: AccountType::Child,
             sender_relationship: SenderRelationship::UnknownAdult,
             relationship_trust_source: RelationshipTrustSource::ServerReputation,
             ..AgentAnalyzeRequest::default()
@@ -100,6 +103,7 @@ mod tests {
         let intake = validate_and_normalize(&request);
 
         assert_eq!(intake.sender_relationship, SenderRelationship::UnknownAdult);
+        assert_eq!(intake.account_type, AccountType::Child);
         assert_eq!(
             intake.relationship_trust_source,
             RelationshipTrustSource::ServerReputation
