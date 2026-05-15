@@ -78,6 +78,8 @@ mod tests {
             local_score: 0.0,
             local_safety_telemetry: Vec::new(),
             privacy_mode: RelayPrivacyMode::MessageOnly,
+            sender_relationship: Default::default(),
+            relationship_trust_source: Default::default(),
         };
 
         let assessment = assess_risk(&inference, &intake);

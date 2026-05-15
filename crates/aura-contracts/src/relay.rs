@@ -2,7 +2,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::common::{
-    AccountType, Confidence, ConversationType, DetectionLayer, ProtectionLevel, ThreatType,
+    AccountType, Confidence, ConversationType, DetectionLayer, ProtectionLevel,
+    RelationshipTrustSource, SenderRelationship, ThreatType,
 };
 use crate::context::{
     Directionality, RelationshipTag, SpeechAct, Stance, ThreatContextFrame, TrajectoryTag,
@@ -282,6 +283,10 @@ pub struct AgentAnalyzeRequest {
     #[serde(default)]
     pub server_sender_risk_hint: Option<f32>,
     #[serde(default)]
+    pub sender_relationship: SenderRelationship,
+    #[serde(default)]
+    pub relationship_trust_source: RelationshipTrustSource,
+    #[serde(default)]
     pub privacy_mode: RelayPrivacyMode,
     #[serde(default)]
     pub capabilities: AgentCapabilities,
@@ -313,6 +318,8 @@ impl Default for AgentAnalyzeRequest {
             local_safety_telemetry: Vec::new(),
             recent_message_window: Vec::new(),
             server_sender_risk_hint: None,
+            sender_relationship: SenderRelationship::default(),
+            relationship_trust_source: RelationshipTrustSource::default(),
             privacy_mode: RelayPrivacyMode::default(),
             capabilities: AgentCapabilities::default(),
             deadline_ms: None,
@@ -464,6 +471,8 @@ struct AgentAnalyzeRequestAuthPayload<'a> {
     local_safety_telemetry: Vec<ClientSafetyTelemetryAuthPayload<'a>>,
     recent_message_window: Vec<MessageWindowEntryAuthPayload<'a>>,
     server_sender_risk_hint_bits: Option<u32>,
+    sender_relationship: SenderRelationship,
+    relationship_trust_source: RelationshipTrustSource,
     privacy_mode: RelayPrivacyMode,
     capabilities: AgentCapabilitiesAuthPayload,
     deadline_ms: Option<u32>,
@@ -559,6 +568,8 @@ fn relay_request_auth_payload(request: &AgentAnalyzeRequest) -> AgentAnalyzeRequ
             .map(message_window_entry_auth_payload)
             .collect(),
         server_sender_risk_hint_bits: request.server_sender_risk_hint.map(f32::to_bits),
+        sender_relationship: request.sender_relationship,
+        relationship_trust_source: request.relationship_trust_source,
         privacy_mode: request.privacy_mode,
         capabilities: AgentCapabilitiesAuthPayload {
             local_context_interpreter: request.capabilities.local_context_interpreter,
@@ -1224,6 +1235,15 @@ mod tests {
 
         let mut tampered = request.clone();
         tampered.local_safety_telemetry[0].reason_family = Some("bullying".to_string());
+        assert!(!verify_relay_request_auth(
+            &tampered,
+            "relay-req-key-1",
+            secret
+        ));
+
+        let mut tampered = request.clone();
+        tampered.sender_relationship = SenderRelationship::UnknownAdult;
+        tampered.relationship_trust_source = RelationshipTrustSource::SelfDeclared;
         assert!(!verify_relay_request_auth(
             &tampered,
             "relay-req-key-1",

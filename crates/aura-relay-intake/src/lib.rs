@@ -2,7 +2,8 @@
 //! agent requests before they reach inference.
 
 use aura_contracts::{
-    AgentAnalyzeRequest, ClientSafetyTelemetryEvent, RelayPrivacyMode, ThreatType,
+    AgentAnalyzeRequest, ClientSafetyTelemetryEvent, RelationshipTrustSource, RelayPrivacyMode,
+    SenderRelationship, ThreatType,
 };
 
 #[derive(Debug, Clone)]
@@ -15,6 +16,8 @@ pub struct IntakeResult {
     pub local_score: f32,
     pub local_safety_telemetry: Vec<ClientSafetyTelemetryEvent>,
     pub privacy_mode: RelayPrivacyMode,
+    pub sender_relationship: SenderRelationship,
+    pub relationship_trust_source: RelationshipTrustSource,
 }
 
 pub fn validate_and_normalize(request: &AgentAnalyzeRequest) -> IntakeResult {
@@ -52,6 +55,8 @@ pub fn validate_and_normalize(request: &AgentAnalyzeRequest) -> IntakeResult {
         local_score,
         local_safety_telemetry,
         privacy_mode: request.privacy_mode,
+        sender_relationship: request.sender_relationship,
+        relationship_trust_source: request.relationship_trust_source,
     }
 }
 
@@ -82,6 +87,23 @@ mod tests {
         };
         let intake = validate_and_normalize(&request);
         assert_eq!(intake.text, "check this");
+    }
+
+    #[test]
+    fn relationship_metadata_is_preserved_as_typed_context() {
+        let request = AgentAnalyzeRequest {
+            sender_relationship: SenderRelationship::UnknownAdult,
+            relationship_trust_source: RelationshipTrustSource::ServerReputation,
+            ..AgentAnalyzeRequest::default()
+        };
+
+        let intake = validate_and_normalize(&request);
+
+        assert_eq!(intake.sender_relationship, SenderRelationship::UnknownAdult);
+        assert_eq!(
+            intake.relationship_trust_source,
+            RelationshipTrustSource::ServerReputation
+        );
     }
 
     #[test]
