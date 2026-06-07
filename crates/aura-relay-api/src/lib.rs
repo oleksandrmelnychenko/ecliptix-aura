@@ -25,6 +25,7 @@ use aura_relay_store::{InMemoryReputationStore, JsonFileReputationStore, Reputat
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
+use zeroize::Zeroizing;
 
 const RELAY_RESPONSE_TTL_MS: u64 = 6 * 60 * 60 * 1_000;
 const REQUEST_REPLAY_WINDOW_MS: u64 = 10 * 60 * 1_000;
@@ -51,32 +52,65 @@ pub struct RelayService {
     auth_rejection_audit_store: Arc<dyn RelayAuthRejectionAuditStore>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct RelayRequestAuthKey {
     key_id: String,
-    secret: Vec<u8>,
+    secret: Zeroizing<Vec<u8>>,
 }
 
-#[derive(Debug, Clone)]
+impl std::fmt::Debug for RelayRequestAuthKey {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RelayRequestAuthKey")
+            .field("key_id", &self.key_id)
+            .field("secret", &"[redacted]")
+            .finish()
+    }
+}
+
+#[derive(Clone)]
 struct RelayResponseAuthKey {
     key_id: String,
-    secret: Vec<u8>,
+    secret: Zeroizing<Vec<u8>>,
 }
 
-#[derive(Debug, Clone)]
+impl std::fmt::Debug for RelayResponseAuthKey {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RelayResponseAuthKey")
+            .field("key_id", &self.key_id)
+            .field("secret", &"[redacted]")
+            .finish()
+    }
+}
+
+#[derive(Clone)]
 struct ProtectedAccountAttestationKey {
     key_id: String,
-    secret: Vec<u8>,
+    secret: Zeroizing<Vec<u8>>,
     not_before_ms: Option<u64>,
     not_after_ms: Option<u64>,
     revoked: bool,
+}
+
+impl std::fmt::Debug for ProtectedAccountAttestationKey {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ProtectedAccountAttestationKey")
+            .field("key_id", &self.key_id)
+            .field("secret", &"[redacted]")
+            .field("not_before_ms", &self.not_before_ms)
+            .field("not_after_ms", &self.not_after_ms)
+            .field("revoked", &self.revoked)
+            .finish()
+    }
 }
 
 impl ProtectedAccountAttestationKey {
     fn active(key_id: impl Into<String>, secret: impl Into<Vec<u8>>) -> Self {
         Self {
             key_id: key_id.into(),
-            secret: secret.into(),
+            secret: Zeroizing::new(secret.into()),
             not_before_ms: None,
             not_after_ms: None,
             revoked: false,
@@ -92,7 +126,7 @@ impl ProtectedAccountAttestationKey {
     ) -> Self {
         Self {
             key_id: key_id.into(),
-            secret: secret.into(),
+            secret: Zeroizing::new(secret.into()),
             not_before_ms,
             not_after_ms,
             revoked,
@@ -1281,7 +1315,7 @@ impl RelayService {
             .iter()
             .map(|key| RelayRequestAuthKey {
                 key_id: key.key_id.trim().to_string(),
-                secret: key.secret.as_bytes().to_vec(),
+                secret: Zeroizing::new(key.secret.as_bytes().to_vec()),
             })
             .collect();
         self.response_auth_key =
@@ -1290,7 +1324,7 @@ impl RelayService {
                 .as_ref()
                 .map(|key| RelayResponseAuthKey {
                     key_id: key.key_id.trim().to_string(),
-                    secret: key.secret.as_bytes().to_vec(),
+                    secret: Zeroizing::new(key.secret.as_bytes().to_vec()),
                 });
         self.protected_account_attestation_keys = config
             .protected_account_attestation_keys
@@ -1351,7 +1385,7 @@ impl RelayService {
     ) -> Self {
         self.request_auth_keys = vec![RelayRequestAuthKey {
             key_id: key_id.into(),
-            secret: secret.into(),
+            secret: Zeroizing::new(secret.into()),
         }];
         self
     }
@@ -1363,7 +1397,7 @@ impl RelayService {
     ) -> Self {
         self.request_auth_keys.push(RelayRequestAuthKey {
             key_id: key_id.into(),
-            secret: secret.into(),
+            secret: Zeroizing::new(secret.into()),
         });
         self
     }
@@ -1375,7 +1409,7 @@ impl RelayService {
     ) -> Self {
         self.response_auth_key = Some(RelayResponseAuthKey {
             key_id: key_id.into(),
-            secret: secret.into(),
+            secret: Zeroizing::new(secret.into()),
         });
         self
     }
