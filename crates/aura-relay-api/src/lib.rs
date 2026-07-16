@@ -3297,7 +3297,6 @@ mod tests {
 
     #[test]
     fn authenticated_agent_relay_loop_feeds_sender_hint_back_to_client() {
-        aura_agent_core::aura_kids::pipeline::clear_kids_memory();
         let pattern_db = PatternDatabase::default_mvp();
         let mut runtime = AgentRuntime::new(child_config(), &pattern_db)
             .with_relay_policy(AgentRelayPolicy {
@@ -3359,7 +3358,6 @@ mod tests {
 
     #[test]
     fn attested_agent_relay_loop_satisfies_strict_account_attestation() {
-        aura_agent_core::aura_kids::pipeline::clear_kids_memory();
         let pattern_db = PatternDatabase::default_mvp();
         let request_secret = b"relay request auth test secret";
         let response_secret = b"relay response auth test secret";
@@ -3432,7 +3430,6 @@ mod tests {
 
     #[test]
     fn metadata_only_agent_relay_loop_feeds_sender_hint_back_to_client() {
-        aura_agent_core::aura_kids::pipeline::clear_kids_memory();
         let pattern_db = PatternDatabase::default_mvp();
         let mut runtime =
             AgentRuntime::new(child_config(), &pattern_db).with_relay_policy(AgentRelayPolicy {
