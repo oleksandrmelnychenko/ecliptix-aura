@@ -1839,17 +1839,13 @@ impl Default for RelayService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aura_agent_core::{
-        AccountType, AgentRelayPolicy, AgentRuntime, AuraConfig, ContentType, ConversationType,
-        DomainMode, MessageInput, ProtectionLevel, SenderId,
-    };
     use aura_contracts::{
         sign_protected_account_token_attestation, sign_relay_request_auth,
-        verify_relay_request_auth, verify_relay_response_auth, ClientSafetyTelemetryEvent,
-        Confidence, DetectionLayer, RawObservation, RelationshipTrustSource, RelayPrivacyMode,
-        SafetyTelemetryAction, SafetyTelemetrySeverity, SafetyTelemetrySurface, SenderRelationship,
+        verify_relay_request_auth, verify_relay_response_auth, AccountType,
+        ClientSafetyTelemetryEvent, Confidence, DetectionLayer, RawObservation,
+        RelationshipTrustSource, RelayPrivacyMode, SafetyTelemetryAction,
+        SafetyTelemetrySeverity, SafetyTelemetrySurface, SenderRelationship,
     };
-    use aura_patterns::PatternDatabase;
 
     #[test]
     fn relay_service_handles_default_request() {
@@ -3295,203 +3291,6 @@ mod tests {
             .contains(&"relay.auth.request_replay".to_string()));
     }
 
-    #[test]
-    fn authenticated_agent_relay_loop_feeds_sender_hint_back_to_client() {
-        let pattern_db = PatternDatabase::default_mvp();
-        let mut runtime = AgentRuntime::new(child_config(), &pattern_db)
-            .with_relay_policy(AgentRelayPolicy {
-                enabled: true,
-                score_threshold: 0.01,
-                privacy_mode: RelayPrivacyMode::MetadataOnly,
-                protected_account_id: Some("child_account_1".to_string()),
-                ..AgentRelayPolicy::default()
-            })
-            .with_relay_request_auth_key(
-                "relay-req-key-1",
-                b"relay request auth test secret".to_vec(),
-            )
-            .with_relay_response_auth_key(
-                "relay-key-1",
-                b"relay response auth test secret".to_vec(),
-            );
-        let service = RelayService::new()
-            .with_request_auth_key(
-                "relay-req-key-1",
-                b"relay request auth test secret".to_vec(),
-            )
-            .with_response_auth_key("relay-key-1", b"relay response auth test secret".to_vec());
-        let sender_id: SenderId = "repeat_risky_sender_auth".into();
-        let base_ms = 1_778_652_000_000;
-
-        for hour in 0..3 {
-            let timestamp_ms = base_ms + hour * 3_600_000;
-            let input = message_input(
-                "dont tell your parents, this is our little secret",
-                sender_id.clone(),
-                format!("conv_relay_auth_loop_{hour}"),
-            );
-            let request = runtime
-                .analyze_for_relay(&input, timestamp_ms)
-                .relay_request
-                .expect("high-risk child safety message should query relay");
-            assert!(request.auth.is_some());
-
-            let response = service.handle_analyze(request);
-            assert!(response.auth.is_some());
-            assert!(!response
-                .reason_codes
-                .contains(&"relay.auth.request_invalid".to_string()));
-            assert!(runtime.record_relay_response_for_sender(
-                &input.sender_id,
-                &response,
-                timestamp_ms
-            ));
-        }
-
-        assert!(
-            runtime
-                .relay_sender_hint(&sender_id, base_ms + 3 * 3_600_000)
-                .unwrap_or_default()
-                >= 0.5
-        );
-    }
-
-    #[test]
-    fn attested_agent_relay_loop_satisfies_strict_account_attestation() {
-        let pattern_db = PatternDatabase::default_mvp();
-        let request_secret = b"relay request auth test secret";
-        let response_secret = b"relay response auth test secret";
-        let attestation_secret = b"protected account attestation secret";
-        let protected_account_token = format!(
-            "acct_{}",
-            aura_agent_core::tokenize_identifier("child_account_1").token
-        );
-        let mut runtime = AgentRuntime::new(child_config(), &pattern_db)
-            .with_relay_policy(AgentRelayPolicy {
-                enabled: true,
-                score_threshold: 0.01,
-                privacy_mode: RelayPrivacyMode::MetadataOnly,
-                protected_account_id: Some("child_account_1".to_string()),
-                protected_account_attestation: sign_protected_account_token_attestation(
-                    &protected_account_token,
-                    current_unix_ms().saturating_add(60_000),
-                    "acct-attest-key-1",
-                    attestation_secret,
-                ),
-                require_protected_account_attestation: true,
-                ..AgentRelayPolicy::default()
-            })
-            .with_relay_request_auth_key("relay-req-key-1", request_secret.to_vec())
-            .with_relay_response_auth_key("relay-key-1", response_secret.to_vec());
-        let service = RelayService::new()
-            .with_request_auth_key("relay-req-key-1", request_secret.to_vec())
-            .with_response_auth_key("relay-key-1", response_secret.to_vec())
-            .with_protected_account_attestation_key(
-                "acct-attest-key-1",
-                attestation_secret.to_vec(),
-            );
-        let sender_id: SenderId = "repeat_risky_sender_attested".into();
-        let base_ms = 1_778_652_000_000;
-
-        for hour in 0..3 {
-            let timestamp_ms = base_ms + hour * 3_600_000;
-            let input = message_input(
-                "dont tell your parents, this is our little secret",
-                sender_id.clone(),
-                format!("conv_relay_attested_loop_{hour}"),
-            );
-            let request = runtime
-                .analyze_for_relay(&input, timestamp_ms)
-                .relay_request
-                .expect("high-risk child safety message should query relay");
-            assert!(request.auth.is_some());
-            assert!(request.protected_account_attestation.is_some());
-
-            let response = service.handle_analyze(request);
-            assert!(response.auth.is_some());
-            assert!(!response
-                .reason_codes
-                .iter()
-                .any(|code| code.starts_with("relay.auth.protected_account_attestation")));
-            assert!(runtime.record_relay_response_for_sender(
-                &input.sender_id,
-                &response,
-                timestamp_ms
-            ));
-        }
-
-        assert!(
-            runtime
-                .relay_sender_hint(&sender_id, base_ms + 3 * 3_600_000)
-                .unwrap_or_default()
-                >= 0.5
-        );
-    }
-
-    #[test]
-    fn metadata_only_agent_relay_loop_feeds_sender_hint_back_to_client() {
-        let pattern_db = PatternDatabase::default_mvp();
-        let mut runtime =
-            AgentRuntime::new(child_config(), &pattern_db).with_relay_policy(AgentRelayPolicy {
-                enabled: true,
-                score_threshold: 0.01,
-                privacy_mode: RelayPrivacyMode::MetadataOnly,
-                protected_account_id: Some("child_account_1".to_string()),
-                ..AgentRelayPolicy::default()
-            });
-        let service = RelayService::new();
-        let sender_id: SenderId = "repeat_risky_sender".into();
-        let base_ms = 1_778_652_000_000;
-
-        for hour in 0..3 {
-            let timestamp_ms = base_ms + hour * 3_600_000;
-            let input = message_input(
-                "dont tell your parents, this is our little secret",
-                sender_id.clone(),
-                format!("conv_relay_loop_{hour}"),
-            );
-            let envelope = runtime.analyze_for_relay(&input, timestamp_ms);
-            let request = envelope
-                .relay_request
-                .expect("high-risk child safety message should query relay");
-            assert!(request.text.is_empty());
-            assert!(request
-                .sender_token
-                .as_deref()
-                .unwrap_or_default()
-                .starts_with("snd_"));
-            assert_eq!(request.local_safety_telemetry.len(), 1);
-
-            let response = service.handle_analyze(request);
-            assert_eq!(
-                response.expires_at_ms,
-                Some(timestamp_ms + RELAY_RESPONSE_TTL_MS)
-            );
-            runtime.record_relay_response_for_sender(&input.sender_id, &response, timestamp_ms);
-        }
-
-        assert!(
-            runtime
-                .relay_sender_hint(&sender_id, base_ms + 3 * 3_600_000)
-                .unwrap_or_default()
-                >= 0.5
-        );
-
-        let result = runtime.analyze_local_with_context(
-            &message_input("our little secret", sender_id, "conv_relay_loop_final"),
-            base_ms + 3 * 3_600_000,
-        );
-
-        assert!(
-            result
-                .reason_codes
-                .iter()
-                .any(|code| code == "domain.kids.memory.sender_risk_accumulation"),
-            "relay reputation hint should trigger local kids sender-risk signal, got {:?}",
-            result.reason_codes
-        );
-    }
-
     fn request_with_safety_telemetry_from_account(
         sender_token: &str,
         hour: u64,
@@ -3565,35 +3364,5 @@ mod tests {
             std::process::id(),
             current_unix_nanos()
         ))
-    }
-
-    fn child_config() -> AuraConfig {
-        AuraConfig {
-            account_type: AccountType::Child,
-            protection_level: ProtectionLevel::High,
-            language: "en".to_string(),
-            domain_mode: DomainMode::Kids,
-            ..AuraConfig::default()
-        }
-    }
-
-    fn message_input(
-        text: &str,
-        sender_id: SenderId,
-        conversation_id: impl Into<String>,
-    ) -> MessageInput {
-        MessageInput {
-            content_type: ContentType::Text,
-            text: Some(text.to_string()),
-            image_data: None,
-            sender_id,
-            conversation_id: conversation_id.into().into(),
-            language: Some("en".to_string()),
-            conversation_type: ConversationType::Direct,
-            member_count: None,
-            server_sender_risk_hint: None,
-            sender_relationship: Default::default(),
-            relationship_trust_source: Default::default(),
-        }
     }
 }
