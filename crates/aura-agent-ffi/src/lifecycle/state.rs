@@ -1066,6 +1066,10 @@ pub(super) fn event_kind_from_proto(value: i32) -> Result<CoreEventKind, String>
         proto::EventKind::IntelGathering => Ok(CoreEventKind::IntelGathering),
         proto::EventKind::MilitaryPhishing => Ok(CoreEventKind::MilitaryPhishing),
         proto::EventKind::MilitaryDisinfo => Ok(CoreEventKind::MilitaryDisinfo),
+        proto::EventKind::ExplicitMediaReceived => Ok(CoreEventKind::ExplicitMediaReceived),
+        proto::EventKind::ExplicitMediaSendAttempt => Ok(CoreEventKind::ExplicitMediaSendAttempt),
+        proto::EventKind::SuggestiveMediaReceived => Ok(CoreEventKind::SuggestiveMediaReceived),
+        proto::EventKind::AdultLinkShared => Ok(CoreEventKind::AdultLinkShared),
         proto::EventKind::Unspecified => Err("unspecified event kind in state".to_string()),
     }
 }
@@ -1128,5 +1132,9 @@ pub(super) fn proto_event_kind(value: CoreEventKind) -> proto::EventKind {
         CoreEventKind::IntelGathering => proto::EventKind::IntelGathering,
         CoreEventKind::MilitaryPhishing => proto::EventKind::MilitaryPhishing,
         CoreEventKind::MilitaryDisinfo => proto::EventKind::MilitaryDisinfo,
+        CoreEventKind::ExplicitMediaReceived => proto::EventKind::ExplicitMediaReceived,
+        CoreEventKind::ExplicitMediaSendAttempt => proto::EventKind::ExplicitMediaSendAttempt,
+        CoreEventKind::SuggestiveMediaReceived => proto::EventKind::SuggestiveMediaReceived,
+        CoreEventKind::AdultLinkShared => proto::EventKind::AdultLinkShared,
     }
 }

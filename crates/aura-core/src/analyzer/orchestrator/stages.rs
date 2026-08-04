@@ -19,6 +19,10 @@ impl Analyzer {
             raw_observations.extend(pattern_result.observations);
         }
 
+        if let Some(observation) = self.media_trust_gate_observation(input) {
+            raw_observations.push(observation);
+        }
+
         // Run ML first so we can pass safety hints to the domain module.
         let ml_safety_hint = if let Some(ref raw_text) = input.text {
             let ml_signals = self.run_ml_layer(truncate_text(raw_text));
@@ -141,6 +145,10 @@ impl Analyzer {
             let text = truncate_text(raw_text);
             let pattern_result = self.collect_pattern_layer(input, text, content_hash);
             raw_observations.extend(pattern_result.observations);
+        }
+
+        if let Some(observation) = self.media_trust_gate_observation(input) {
+            raw_observations.push(observation);
         }
 
         if let Some(ref raw_text) = input.text {

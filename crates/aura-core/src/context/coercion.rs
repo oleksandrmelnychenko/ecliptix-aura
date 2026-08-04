@@ -300,7 +300,11 @@ impl CoercionDetector {
                 | EventKind::PsyopsPattern
                 | EventKind::IntelGathering
                 | EventKind::MilitaryPhishing
-                | EventKind::MilitaryDisinfo => {}
+                | EventKind::MilitaryDisinfo
+                | EventKind::ExplicitMediaReceived
+                | EventKind::ExplicitMediaSendAttempt
+                | EventKind::SuggestiveMediaReceived
+                | EventKind::AdultLinkShared => {}
             }
         }
 
