@@ -33,6 +33,8 @@ fn media_msg(content_type: ContentType, sender: &str, conversation: &str) -> Mes
         content_type,
         text: None,
         image_data: None,
+        media_info: None,
+        client_vision_verdict: None,
         sender_id: SenderId::from(sender),
         conversation_id: ConversationId::from(conversation),
         language: None,

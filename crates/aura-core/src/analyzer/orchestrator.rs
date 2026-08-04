@@ -444,11 +444,15 @@ impl Analyzer {
         self.analyze_staged(input)
     }
 
-    /// Returns the trust-gate observation for incoming media, when applicable.
+    /// Returns the media-stage observation for incoming media, when applicable.
     ///
-    /// Media stage (P0): deterministic relationship-metadata policy, no pixel
-    /// analysis. See `crate::media` for the gate rules.
-    fn media_trust_gate_observation(&self, input: &MessageInput) -> Option<RawObservation> {
+    /// Verdict-driven classification (P2) when a validated client verdict is
+    /// present, relationship trust gate (P0) otherwise. See `crate::media`.
+    fn media_trust_gate_observation(
+        &self,
+        input: &MessageInput,
+        content_hash: Option<u64>,
+    ) -> Option<RawObservation> {
         if !self.is_detection_enabled(ThreatType::Nsfw) {
             return None;
         }
@@ -456,13 +460,22 @@ impl Analyzer {
             .context_tracker
             .contact_profiler()
             .snapshot(&input.sender_id);
-        crate::media::media_trust_gate_signal(
+        let output = crate::media::media_stage_output(
             input,
             self.config.account_type,
             self.config.protected_account_id.as_deref(),
             snapshot.as_ref(),
-        )
-        .map(RawObservation::signal)
+        )?;
+        Some(match output.event {
+            Some(event) => RawObservation::signal_with_event(
+                output.signal,
+                event.kind,
+                event.confidence,
+                event.subtype,
+                content_hash,
+            ),
+            None => RawObservation::signal(output.signal),
+        })
     }
 
     /// Analyzes a message and updates conversation context with detected events at the given timestamp.

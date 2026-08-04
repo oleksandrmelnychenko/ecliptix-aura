@@ -605,6 +605,8 @@ fn build_realistic_chat_scenario(spec: &RealisticChatCaseSpec) -> RealisticChatS
                 content_type: ContentType::Text,
                 text: Some(message.text.clone()),
                 image_data: None,
+                media_info: None,
+                client_vision_verdict: None,
                 sender_id: SenderId::from(
                     message
                         .sender_id

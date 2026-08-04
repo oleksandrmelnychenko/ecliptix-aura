@@ -2536,6 +2536,8 @@ pub(crate) fn direct_msg(text: &str, sender: &str, conversation_id: &str) -> Mes
         content_type: ContentType::Text,
         text: Some(text.to_string()),
         image_data: None,
+        media_info: None,
+        client_vision_verdict: None,
         sender_id: sender.into(),
         conversation_id: conversation_id.into(),
         language: Some("en".to_string()),

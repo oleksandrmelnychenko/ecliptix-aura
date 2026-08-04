@@ -74,6 +74,42 @@ pub(super) fn decoded_config_from_proto(
     })
 }
 
+fn media_info_from_proto(info: proto::MediaInfo) -> aura_agent_core::types::MediaInfo {
+    aura_agent_core::types::MediaInfo {
+        width: info.width,
+        height: info.height,
+        mime_type: info.mime_type,
+        original_size_bytes: info.original_size_bytes,
+        keyframe_index: info.keyframe_index,
+        keyframe_count: info.keyframe_count,
+    }
+}
+
+fn media_verdict_class_from_proto(value: i32) -> aura_agent_core::types::MediaClass {
+    use aura_agent_core::types::MediaClass;
+    match proto::MediaVerdictClass::try_from(value).unwrap_or(proto::MediaVerdictClass::Unspecified)
+    {
+        proto::MediaVerdictClass::Neutral => MediaClass::Neutral,
+        proto::MediaVerdictClass::Suggestive => MediaClass::Suggestive,
+        proto::MediaVerdictClass::Explicit => MediaClass::Explicit,
+        proto::MediaVerdictClass::Drawing => MediaClass::Drawing,
+        // Unknown values fail closed as Unclear (abstain downstream).
+        proto::MediaVerdictClass::Unclear | proto::MediaVerdictClass::Unspecified => {
+            MediaClass::Unclear
+        }
+    }
+}
+
+fn client_vision_verdict_from_proto(
+    verdict: proto::ClientVisionVerdict,
+) -> aura_agent_core::types::ClientVisionVerdict {
+    aura_agent_core::types::ClientVisionVerdict {
+        class: media_verdict_class_from_proto(verdict.verdict_class),
+        confidence: verdict.confidence,
+        provider: verdict.provider,
+    }
+}
+
 pub(super) fn message_input_from_proto(
     message: proto::MessageInput,
 ) -> Result<MessageInput, String> {
@@ -81,6 +117,10 @@ pub(super) fn message_input_from_proto(
         content_type: content_type_from_proto(message.content_type),
         text: message.text,
         image_data: message.image_data,
+        media_info: message.media_info.map(media_info_from_proto),
+        client_vision_verdict: message
+            .client_vision_verdict
+            .map(client_vision_verdict_from_proto),
         sender_id: aura_agent_core::SenderId::from(validate_ffi_identifier(
             "message sender id",
             message.sender_id,

@@ -1,0 +1,8 @@
+[package]
+name = "aura-vision"
+version.workspace = true
+edition.workspace = true
+description = "On-device media classification contract and backends for AURA"
+
+[dependencies]
+serde.workspace = true

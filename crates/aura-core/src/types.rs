@@ -875,6 +875,9 @@ pub enum ContentType {
     Url,
 }
 
+// ── Media classification contract (source: aura-vision) ─────────────
+pub use aura_vision::{ClientVisionVerdict, MediaClass, MediaInfo, MediaVerdict, VerdictSource};
+
 /// Holds the raw input data for a single message to be analysed.
 #[derive(Debug, Clone)]
 pub struct MessageInput {
@@ -890,4 +893,9 @@ pub struct MessageInput {
     pub sender_relationship: SenderRelationship,
     /// Source used to derive sender_relationship. Self-declared data is not trust.
     pub relationship_trust_source: RelationshipTrustSource,
+    /// Media attachment metadata supplied by the host application.
+    pub media_info: Option<MediaInfo>,
+    /// Pre-computed platform-native sensitive-content verdict (e.g. Apple
+    /// SensitiveContentAnalysis). Validated by the media stage before use.
+    pub client_vision_verdict: Option<ClientVisionVerdict>,
 }

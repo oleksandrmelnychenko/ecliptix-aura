@@ -2756,6 +2756,8 @@ mod tests {
             content_type: ContentType::Text,
             text: Some(text.to_string()),
             image_data: None,
+            media_info: None,
+            client_vision_verdict: None,
             sender_id: SenderId::from("sender"),
             conversation_id: ConversationId::from("conv"),
             language: Some("en".to_string()),

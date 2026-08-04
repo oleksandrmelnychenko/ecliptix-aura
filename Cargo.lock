@@ -111,6 +111,7 @@ dependencies = [
  "aura-ml",
  "aura-patterns",
  "aura-proto",
+ "aura-vision",
  "chrono",
  "criterion",
  "getrandom 0.4.3",
@@ -292,6 +293,13 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tracing",
+]
+
+[[package]]
+name = "aura-vision"
+version = "0.2.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

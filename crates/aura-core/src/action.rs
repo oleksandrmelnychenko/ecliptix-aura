@@ -332,7 +332,9 @@ pub fn decide_action_v2(
             } else {
                 decide_action(score, protection_level)
             };
-            let parent_alert = if score >= 0.75 {
+            let parent_alert = if score >= 0.85 {
+                AlertPriority::High
+            } else if score >= 0.75 {
                 AlertPriority::Medium
             } else {
                 AlertPriority::None
@@ -558,6 +560,16 @@ pub fn augment_recommendation_for_reason_codes(
         recommendation
             .ui_actions
             .push(UiAction::ConfirmBeforeOpenLink);
+    }
+
+    let has_confirmed_explicit_media = reason_codes
+        .iter()
+        .any(|code| code.starts_with(crate::media::MEDIA_VISION_EXPLICIT));
+    if threat_type == ThreatType::Nsfw && has_confirmed_explicit_media {
+        recommendation
+            .ui_actions
+            .push(UiAction::SuggestBlockContact);
+        recommendation.ui_actions.push(UiAction::SuggestReport);
     }
 
     recommendation.ui_actions.sort();
