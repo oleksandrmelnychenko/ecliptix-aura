@@ -6,9 +6,11 @@ media, outgoing media, links, and text. Text-level NSFW detection already
 exists; this blueprint closes the media gap and unifies all layers under one
 policy surface.
 
-Status: P0 implemented (trust-gated blur, media EventKind/ReasonCode
-contract); P1+ proposed. Owner: safety runtime. Related docs:
-`DATAFLOW.md`, `proto-abi-stability.md`, `privacy-audit-policy.md`,
+Status: P0 and P1 implemented; P2 verdict plumbing implemented
+(`aura-vision` crate, `ClientVisionVerdict`/`MediaInfo` contract,
+verdict-driven media stage) — ONNX backend and Swift SCA client
+integration pending. Owner: safety runtime. Related docs: `DATAFLOW.md`,
+`proto-abi-stability.md`, `privacy-audit-policy.md`,
 `context-architecture-blueprint.md`.
 
 ---
@@ -391,7 +393,7 @@ Extends the existing evaluation-first discipline:
 |---|---|---|---|
 | **P0** ✅ | Trust-gated blur: media from `New`/`Occasional` contacts on minor profiles → `BlurUntilTap` + `WarnBeforeDisplay`; policy matrix skeleton; new EventKinds/ReasonCodes | none | shipped: deterministic policy-matrix integration tests (`aura-core/tests/media_trust_gate.rs`) green, full workspace green; probabilistic media scenario pack arrives with the P2 mock backend |
 | **P1** ✅ | Adult-URL category in `url_checker`; `ADULT_LINK_SHARED` wired to context | none | shipped: heuristic unit tests + integration tests (`aura-core/tests/adult_link_gate.rs`) green incl. IDN/Cyrillic hosts and benign look-alike negatives; minor profiles only |
-| **P2** | `aura-vision` crate: ONNX backend + `ClientVisionVerdict` path; Apple SCA integration in `swift/Sources/AuraAgent`; media stage 2b; full policy matrix | yes | model gates (§13.3) green; latency budget met on reference devices; FFI soak green |
+| **P2** 🔶 | `aura-vision` crate: ONNX backend + `ClientVisionVerdict` path; Apple SCA integration in `swift/Sources/AuraAgent`; media stage 2b; full policy matrix | yes | verdict plumbing shipped: `aura-vision` crate (verdict contract, validation, `NoopBackend`, `VisionBackend` trait), proto `MediaInfo`/`ClientVisionVerdict` (fields 12–13), verdict-driven media stage with `ExplicitMediaReceived`/`SuggestiveMediaReceived` events, trust-aware policy (`aura-core/tests/vision_verdict_gate.rs` green). Remaining: ONNX backend behind `onnx` feature (model gates §13.3, device latency budget), Swift SCA glue producing `ClientVisionVerdict`, FFI soak for `image_data` corpus |
 | **P3** | Video keyframes; outgoing (send-side) protection + sextortion signature escalation | reuses P2 | sextortion scenario pack green; send-side UX contract signed off |
 | **P4** | PDQ known-material matching | list membership | legal/partnership sign-off; block-render path verified |
 

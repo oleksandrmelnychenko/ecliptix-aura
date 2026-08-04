@@ -427,6 +427,8 @@ mod tests {
                     content_type: ContentType::Text,
                     text: Some("Where do you live? What school do you go to?".to_string()),
                     image_data: None,
+                    media_info: None,
+                    client_vision_verdict: None,
                     sender_id: "stranger".into(),
                     conversation_id: "dm".into(),
                     language: Some("en".to_string()),

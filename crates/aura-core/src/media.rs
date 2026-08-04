@@ -1,12 +1,18 @@
-//! Trust-gated media protection.
+//! Media stage: trust-gated blur (P0) and verdict-driven classification (P2).
 //!
-//! Phase P0 of the NSFW media protection architecture
-//! (`docs/nsfw-media-protection-architecture.md`): incoming image and video
-//! messages from low-trust contacts on minor profiles are blurred before any
-//! pixel-level classification exists. The gate is deterministic policy on
-//! relationship metadata — it never inspects media bytes, so it also serves
-//! as the fail-closed path once a vision backend exists and is unavailable.
+//! From `docs/nsfw-media-protection-architecture.md`: incoming image and
+//! video messages flow through a two-tier decision. When a validated
+//! classification verdict exists (today: platform-native classifiers via
+//! `ClientVisionVerdict`, e.g. Apple SensitiveContentAnalysis), the verdict
+//! drives the signal — explicit media is flagged for every profile with
+//! trust-aware severity, suggestive media only for minors. Without a usable
+//! verdict, the deterministic relationship trust gate blurs unverified media
+//! from low-trust contacts on minor profiles — the fail-closed path. Media
+//! bytes are never inspected here and never persisted.
 
+use aura_vision::{accept_client_verdict, MediaClass, MediaVerdict};
+
+use crate::context::events::EventKind;
 use crate::types::{
     AccountType, CircleTier, Confidence, ContactSnapshot, ContentType, DetectionSignal,
     MessageInput, RelationshipTrustSource, SenderRelationship, ThreatType,
@@ -19,6 +25,31 @@ pub const MEDIA_TRUST_GATE_REASON_PREFIX: &str = "media.trust_gate";
 
 /// Reason code for the P0 incoming-media gate.
 pub const MEDIA_TRUST_GATE_UNVERIFIED_INCOMING: &str = "media.trust_gate.unverified_incoming";
+
+/// Reason code for classifier-confirmed explicit media.
+pub const MEDIA_VISION_EXPLICIT: &str = "media.vision.explicit";
+
+/// Reason code for classifier-confirmed suggestive media.
+pub const MEDIA_VISION_SUGGESTIVE: &str = "media.vision.suggestive";
+
+/// Reason code for classifier-confirmed drawn/animated sexual content.
+pub const MEDIA_VISION_DRAWING: &str = "media.vision.drawing";
+
+/// Minimum confidence for a Neutral verdict to release the trust gate.
+const NEUTRAL_RELEASE_CONFIDENCE: f32 = 0.7;
+
+/// Output of the media stage: a detection signal, optionally paired with a
+/// context event for the conversation timeline and contact profile.
+pub(crate) struct MediaStageOutput {
+    pub signal: DetectionSignal,
+    pub event: Option<MediaStageEvent>,
+}
+
+pub(crate) struct MediaStageEvent {
+    pub kind: EventKind,
+    pub confidence: f32,
+    pub subtype: Option<String>,
+}
 
 fn is_guardian_managed_sender(input: &MessageInput) -> bool {
     // Self-declared relationship data is not trust; only guardian- or
@@ -36,44 +67,173 @@ fn is_guardian_managed_sender(input: &MessageInput) -> bool {
         )
 }
 
-/// Returns the trust-gate signal for an incoming media message, or `None`
-/// when the gate does not apply.
+fn is_historically_trusted(snapshot: Option<&ContactSnapshot>) -> bool {
+    let circle_tier = snapshot.map_or(CircleTier::New, |s| s.circle_tier);
+    snapshot.is_some_and(|s| s.is_trusted)
+        || matches!(circle_tier, CircleTier::Inner | CircleTier::Regular)
+}
+
+/// Runs the media stage for one message: verdict-driven classification when a
+/// validated verdict exists, the relationship trust gate otherwise.
 ///
-/// The gate applies when all of the following hold:
+/// Common preconditions:
 /// - content is an image or video (`ContentType::Image` / `ContentType::Video`);
-/// - the protected account is a minor profile (`Child` or `Teen`);
 /// - the sender is not the protected account itself (send-side protection is
-///   phase P3);
-/// - the sender is not a guardian-verified parent/guardian;
-/// - contact history has not established trust (`is_trusted`, `Inner`, or
-///   `Regular` tier all bypass; absent history counts as `New` — fail closed).
-pub(crate) fn media_trust_gate_signal(
+///   phase P3).
+///
+/// Verdict path (any profile): explicit media is flagged with trust-aware
+/// severity — a guardian-verified sender does NOT bypass a confirmed-explicit
+/// verdict, only the unverified gate. Suggestive/drawn content is flagged for
+/// minor profiles only. A confident Neutral verdict releases the trust gate.
+///
+/// Trust-gate path (minor profiles only): unverified media from a low-trust
+/// contact is blurred; absent history counts as `New` — fail closed.
+pub(crate) fn media_stage_output(
     input: &MessageInput,
     account_type: AccountType,
     protected_account_id: Option<&str>,
     snapshot: Option<&ContactSnapshot>,
-) -> Option<DetectionSignal> {
+) -> Option<MediaStageOutput> {
     match input.content_type {
         ContentType::Image | ContentType::Video => {}
         ContentType::Text | ContentType::Voice | ContentType::Url => return None,
     }
+    if protected_account_id == Some(&*input.sender_id) {
+        return None;
+    }
+
+    let trusted = is_historically_trusted(snapshot);
+
+    if let Some(verdict) = input
+        .client_vision_verdict
+        .as_ref()
+        .and_then(accept_client_verdict)
+    {
+        if !verdict.abstained {
+            match verdict.class {
+                MediaClass::Explicit => {
+                    return explicit_media_output(input, account_type, trusted, &verdict);
+                }
+                MediaClass::Suggestive | MediaClass::Drawing => {
+                    return suggestive_media_output(input, account_type, trusted, &verdict);
+                }
+                MediaClass::Neutral => {
+                    if verdict.confidence >= NEUTRAL_RELEASE_CONFIDENCE {
+                        return None;
+                    }
+                    // Low-confidence Neutral: fall through to the trust gate.
+                }
+                MediaClass::Unclear => {}
+            }
+        }
+    }
+
+    trust_gate_output(input, account_type, snapshot, trusted)
+}
+
+fn verdict_provider(input: &MessageInput) -> String {
+    input
+        .client_vision_verdict
+        .as_ref()
+        .map(|verdict| verdict.provider.clone())
+        .unwrap_or_default()
+}
+
+fn explicit_media_output(
+    input: &MessageInput,
+    account_type: AccountType,
+    trusted: bool,
+    verdict: &MediaVerdict,
+) -> Option<MediaStageOutput> {
+    let score = match account_type {
+        // Minor profiles: confirmed explicit is a serious incident even from
+        // an otherwise trusted contact.
+        AccountType::Child | AccountType::Teen => (0.60 + 0.35 * verdict.confidence).min(0.95),
+        // Adults: media between established contacts is their business;
+        // unsolicited explicit media from low-trust senders gets a blur band.
+        AccountType::Adult => {
+            if trusted {
+                return None;
+            }
+            0.35 + 0.20 * verdict.confidence
+        }
+    };
+    let signal = DetectionSignal::pattern(
+        ThreatType::Nsfw,
+        score,
+        Confidence::High,
+        MEDIA_VISION_EXPLICIT,
+        "Classifier-confirmed explicit media",
+    )
+    .with_threat_subtype("client_platform");
+    Some(MediaStageOutput {
+        signal,
+        event: Some(MediaStageEvent {
+            kind: EventKind::ExplicitMediaReceived,
+            confidence: verdict.confidence,
+            subtype: Some(verdict_provider(input)),
+        }),
+    })
+}
+
+fn suggestive_media_output(
+    input: &MessageInput,
+    account_type: AccountType,
+    trusted: bool,
+    verdict: &MediaVerdict,
+) -> Option<MediaStageOutput> {
     match account_type {
         AccountType::Child | AccountType::Teen => {}
         AccountType::Adult => return None,
     }
-    if protected_account_id == Some(&*input.sender_id) {
-        return None;
+    // Suggestive from an established contact stays a soft mark; never a
+    // guardian alert (scores are capped well below the alert band).
+    let score = if trusted {
+        0.30
+    } else {
+        (0.45 + 0.15 * verdict.confidence).min(0.60)
+    };
+    let reason_code = if verdict.class == MediaClass::Drawing {
+        MEDIA_VISION_DRAWING
+    } else {
+        MEDIA_VISION_SUGGESTIVE
+    };
+    let signal = DetectionSignal::pattern(
+        ThreatType::Nsfw,
+        score,
+        Confidence::Medium,
+        reason_code,
+        "Classifier-flagged suggestive media",
+    )
+    .with_threat_subtype("client_platform");
+    Some(MediaStageOutput {
+        signal,
+        event: Some(MediaStageEvent {
+            kind: EventKind::SuggestiveMediaReceived,
+            confidence: verdict.confidence,
+            subtype: Some(verdict_provider(input)),
+        }),
+    })
+}
+
+fn trust_gate_output(
+    input: &MessageInput,
+    account_type: AccountType,
+    snapshot: Option<&ContactSnapshot>,
+    trusted: bool,
+) -> Option<MediaStageOutput> {
+    match account_type {
+        AccountType::Child | AccountType::Teen => {}
+        AccountType::Adult => return None,
     }
     if is_guardian_managed_sender(input) {
         return None;
     }
-
-    let circle_tier = snapshot.map_or(CircleTier::New, |s| s.circle_tier);
-    let is_trusted = snapshot.is_some_and(|s| s.is_trusted);
-    if is_trusted || matches!(circle_tier, CircleTier::Inner | CircleTier::Regular) {
+    if trusted {
         return None;
     }
 
+    let circle_tier = snapshot.map_or(CircleTier::New, |s| s.circle_tier);
     let (score, subtype) = match (account_type, circle_tier) {
         (AccountType::Child, CircleTier::New) => (0.50, "child_new_contact"),
         (AccountType::Child, CircleTier::Occasional) => (0.45, "child_occasional_contact"),
@@ -85,8 +245,8 @@ pub(crate) fn media_trust_gate_signal(
 
     // Pattern layer, not context layer: the gate is a deterministic rule on
     // metadata, and context-only signals are damped in signal combination.
-    Some(
-        DetectionSignal::pattern(
+    Some(MediaStageOutput {
+        signal: DetectionSignal::pattern(
             ThreatType::Nsfw,
             score,
             Confidence::Medium,
@@ -94,7 +254,21 @@ pub(crate) fn media_trust_gate_signal(
             "Unverified media from a low-trust contact; blur until the user opts in",
         )
         .with_threat_subtype(subtype),
-    )
+        event: None,
+    })
+}
+
+/// Compatibility wrapper used by the unit tests below and the orchestrator's
+/// P0 trust-gate behavior checks.
+#[cfg(test)]
+pub(crate) fn media_trust_gate_signal(
+    input: &MessageInput,
+    account_type: AccountType,
+    protected_account_id: Option<&str>,
+    snapshot: Option<&ContactSnapshot>,
+) -> Option<DetectionSignal> {
+    media_stage_output(input, account_type, protected_account_id, snapshot)
+        .map(|output| output.signal)
 }
 
 #[cfg(test)]
@@ -108,6 +282,8 @@ mod tests {
             content_type,
             text: None,
             image_data: None,
+            media_info: None,
+            client_vision_verdict: None,
             sender_id: SenderId::from(sender),
             conversation_id: ConversationId::from("dm_1"),
             language: None,

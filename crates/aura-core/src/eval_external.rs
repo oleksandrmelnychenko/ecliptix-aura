@@ -947,6 +947,8 @@ fn build_external_curated_scenario(spec: &ExternalCuratedCaseSpec) -> ExternalCu
                 content_type: ContentType::Text,
                 text: Some(message.text.clone()),
                 image_data: None,
+                media_info: None,
+                client_vision_verdict: None,
                 sender_id: SenderId::from(
                     message
                         .sender_id

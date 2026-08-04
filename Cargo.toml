@@ -10,6 +10,7 @@ members = [
     "crates/aura-military",
     "crates/aura-patterns",
     "crates/aura-ml",
+    "crates/aura-vision",
     "crates/aura-proto",
     "crates/aura-agent-ffi",
     "crates/aura-relay-api",

@@ -257,6 +257,8 @@ fn proto_message(text: &str, sender_id: &str, conversation_id: &str) -> proto::M
         content_type: proto::ContentType::Text as i32,
         text: Some(text.to_string()),
         image_data: None,
+        media_info: None,
+        client_vision_verdict: None,
         sender_id: sender_id.to_string(),
         conversation_id: conversation_id.to_string(),
         language: Some("en".to_string()),

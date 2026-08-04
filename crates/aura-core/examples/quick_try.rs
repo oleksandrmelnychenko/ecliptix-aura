@@ -281,6 +281,8 @@ fn run_once(analyzer: &mut Analyzer, state: &mut SessionState, text: &str) {
         content_type: ContentType::Text,
         text: Some(text.to_string()),
         image_data: None,
+        media_info: None,
+        client_vision_verdict: None,
         sender_id: state.sender_id.as_str().into(),
         conversation_id: state.conversation_id.as_str().into(),
         language: Some(state.language.clone()),

@@ -36,6 +36,8 @@ fn dm(text: &str, sender: &str, conv: &str, lang: &str) -> MessageInput {
         content_type: ContentType::Text,
         text: Some(text.to_string()),
         image_data: None,
+        media_info: None,
+        client_vision_verdict: None,
         sender_id: sender.into(),
         conversation_id: conv.into(),
         language: Some(lang.to_string()),

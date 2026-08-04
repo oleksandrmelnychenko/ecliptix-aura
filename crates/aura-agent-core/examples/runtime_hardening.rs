@@ -428,6 +428,8 @@ fn message_input(event: &SyntheticEvent) -> MessageInput {
         content_type: ContentType::Text,
         text: Some(event.text.to_string()),
         image_data: None,
+        media_info: None,
+        client_vision_verdict: None,
         sender_id: SenderId::from(event.sender_id.as_str()),
         conversation_id: event.conversation_id.as_str().into(),
         language: Some("en".to_string()),

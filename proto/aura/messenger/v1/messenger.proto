@@ -590,6 +590,38 @@ message AuraExecutionPolicyApplicationReceipt {
   bytes execution_policy_trust_keyring_digest = 16;
 }
 
+enum MediaVerdictClass {
+  MEDIA_VERDICT_CLASS_UNSPECIFIED = 0;
+  MEDIA_VERDICT_CLASS_NEUTRAL = 1;
+  MEDIA_VERDICT_CLASS_SUGGESTIVE = 2;
+  MEDIA_VERDICT_CLASS_EXPLICIT = 3;
+  MEDIA_VERDICT_CLASS_DRAWING = 4;
+  MEDIA_VERDICT_CLASS_UNCLEAR = 5;
+}
+
+// Metadata about a media attachment. The runtime never receives original
+// media bytes — image_data carries a client-downscaled thumbnail only.
+message MediaInfo {
+  uint32 width = 1;
+  uint32 height = 2;
+  string mime_type = 3;
+  uint64 original_size_bytes = 4;
+  // Video keyframe sampling: which sampled frame this input represents.
+  uint32 keyframe_index = 5;
+  uint32 keyframe_count = 6;
+}
+
+// Pre-computed sensitive-content verdict from a platform-native classifier
+// (e.g. Apple SensitiveContentAnalysis). The core validates and consumes it
+// instead of re-classifying on platforms that provide one.
+message ClientVisionVerdict {
+  MediaVerdictClass verdict_class = 1;
+  // Calibrated confidence in [0.0, 1.0].
+  float confidence = 2;
+  // Verdict provider identifier, e.g. "apple.sca".
+  string provider = 3;
+}
+
 message MessageInput {
   ContentType content_type = 1;
   optional string text = 2;
@@ -605,6 +637,8 @@ message MessageInput {
   SenderRelationship sender_relationship = 10;
   // Source used to derive sender_relationship. Self-declared data is not trust.
   RelationshipTrustSource relationship_trust_source = 11;
+  optional MediaInfo media_info = 12;
+  optional ClientVisionVerdict client_vision_verdict = 13;
 }
 
 message AnalyzeContextRequest {
