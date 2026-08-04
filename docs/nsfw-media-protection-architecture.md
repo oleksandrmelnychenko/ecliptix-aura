@@ -31,7 +31,7 @@ What already works (and must not be duplicated):
 | Grooming precursors | Done | `EVENT_KIND_PHOTO_REQUEST`, `EVENT_KIND_SEXUAL_CONTENT`, grooming context detector |
 | UI actions | Done | `BlurUntilTap`, `WarnBeforeDisplay`, `WarnBeforeSend`, `EscalateToGuardian`, `SuggestBlockContact` |
 | Contact trust model | Done | `CircleTier` (Inner/Regular/Occasional/New), trust decay, behavioral trend |
-| Link analysis | Partial | `url_checker.rs` covers phishing/homoglyph/doppelganger; **no adult-content category** |
+| Link analysis | Done (P1) | `url_checker.rs`: phishing/homoglyph/doppelganger + adult-content category (`find_adult_content_urls`, `link.adult_content`, `AdultLinkShared` event, minor profiles only) |
 | Trust-gated media blur (P0) | Done | `aura-core/src/media.rs`, media stage 2b in the orchestrator, `media.trust_gate.*` policy routing, media `EventKind` contract (proto 57–60) |
 | Image content analysis | **Missing** | — |
 | Video content analysis | **Missing** | — |
@@ -390,7 +390,7 @@ Extends the existing evaluation-first discipline:
 | Phase | Scope | ML needed | Exit criteria |
 |---|---|---|---|
 | **P0** ✅ | Trust-gated blur: media from `New`/`Occasional` contacts on minor profiles → `BlurUntilTap` + `WarnBeforeDisplay`; policy matrix skeleton; new EventKinds/ReasonCodes | none | shipped: deterministic policy-matrix integration tests (`aura-core/tests/media_trust_gate.rs`) green, full workspace green; probabilistic media scenario pack arrives with the P2 mock backend |
-| **P1** | Adult-URL category in `url_checker`; `ADULT_LINK_SHARED` wired to context | none | link scenarios green incl. IDN/shortener cases |
+| **P1** ✅ | Adult-URL category in `url_checker`; `ADULT_LINK_SHARED` wired to context | none | shipped: heuristic unit tests + integration tests (`aura-core/tests/adult_link_gate.rs`) green incl. IDN/Cyrillic hosts and benign look-alike negatives; minor profiles only |
 | **P2** | `aura-vision` crate: ONNX backend + `ClientVisionVerdict` path; Apple SCA integration in `swift/Sources/AuraAgent`; media stage 2b; full policy matrix | yes | model gates (§13.3) green; latency budget met on reference devices; FFI soak green |
 | **P3** | Video keyframes; outgoing (send-side) protection + sextortion signature escalation | reuses P2 | sextortion scenario pack green; send-side UX contract signed off |
 | **P4** | PDQ known-material matching | list membership | legal/partnership sign-off; block-render path verified |

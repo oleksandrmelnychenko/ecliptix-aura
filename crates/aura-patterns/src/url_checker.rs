@@ -16,6 +16,16 @@ pub struct SuspiciousUrl {
     pub explanation: String,
 }
 
+/// A URL heuristically categorized as pointing to adult content.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AdultContentUrl {
+    pub url: String,
+    pub score: f32,
+    /// Stable detail label: `adult_tld`, `adult_host_keyword`, or `adult_path_keyword`.
+    pub subtype: String,
+    pub explanation: String,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct BlockedUrlMatch {
     pub url: String,
@@ -129,6 +139,39 @@ impl UrlChecker {
             }
             if let Some(hit) = self.detect_homoglyph_host(url, &parsed.host, &parsed.host_lower) {
                 upsert_suspicious_hit(&mut merged, hit);
+            }
+        });
+
+        merged.into_values().collect()
+    }
+
+    /// Finds URLs that heuristically point to adult content.
+    ///
+    /// Category heuristics only (adult TLDs, host and path vocabulary,
+    /// including uk/ru transliterations and Cyrillic hosts). Exact adult
+    /// domains belong in data-driven `UrlDomain` blocklist rules, which take
+    /// precedence and are skipped here.
+    pub fn find_adult_content_urls(&self, text: &str) -> Vec<AdultContentUrl> {
+        let mut merged: HashMap<String, AdultContentUrl> = HashMap::new();
+
+        for_each_url_token(text, |url| {
+            let Some(parsed) = Self::parse_url(url) else {
+                return;
+            };
+            if self.has_blocked_domain_match(&parsed.domain) {
+                return;
+            }
+            if let Some(hit) = assess_adult_content_url(url, &parsed) {
+                match merged.get_mut(&hit.url) {
+                    Some(existing) => {
+                        if hit.score > existing.score {
+                            *existing = hit;
+                        }
+                    }
+                    None => {
+                        merged.insert(hit.url.clone(), hit);
+                    }
+                }
             }
         });
 
@@ -414,6 +457,105 @@ fn suspicious_keywords() -> &'static [&'static str] {
     ]
 }
 
+const ADULT_TLDS: &[&str] = &["xxx", "porn", "adult", "sex"];
+
+/// Substrings that are unambiguous anywhere inside a hostname.
+const ADULT_HOST_SUBSTRINGS: &[&str] = &[
+    "porn",
+    "xvideo",
+    "xnxx",
+    "xhamster",
+    "redtube",
+    "youporn",
+    "onlyfans",
+    "hentai",
+    "sexcam",
+    "camsex",
+    "stripchat",
+    "chaturbate",
+    "sextape",
+];
+
+/// Tokens matched only against whole host labels (split on `.` and `-`) so
+/// that hosts like `essex.gov.uk` or `nudeln.de` never match.
+const ADULT_HOST_LABEL_TOKENS: &[&str] = &[
+    "xxx", "sex", "seks", "nude", "nudes", "nsfw", "milf", "bdsm", "escort",
+];
+
+/// Cyrillic vocabulary checked against the raw (pre-punycode) host.
+const ADULT_HOST_CYRILLIC_SUBSTRINGS: &[&str] =
+    &["порно", "секс", "эроти", "ероти", "интим", "інтим"];
+
+/// Substrings checked against the URL path and query.
+const ADULT_PATH_SUBSTRINGS: &[&str] = &["porn", "/xxx", "/nsfw", "/nudes", "/hentai", "sextape"];
+
+fn host_labels(domain: &str) -> impl Iterator<Item = &str> {
+    domain.split(['.', '-'])
+}
+
+fn url_path_and_query(url: &str) -> Option<String> {
+    let token = trim_url_token(url);
+    let without_scheme = token
+        .strip_prefix("https://")
+        .or_else(|| token.strip_prefix("http://"))
+        .unwrap_or(token);
+    let slash = without_scheme.find('/')?;
+    Some(without_scheme[slash..].to_lowercase())
+}
+
+fn assess_adult_content_url(url: &str, parsed: &ParsedUrl) -> Option<AdultContentUrl> {
+    let tld = parsed.domain.rsplit('.').next().unwrap_or_default();
+    if ADULT_TLDS.contains(&tld) {
+        return Some(AdultContentUrl {
+            url: url.to_string(),
+            score: 0.85,
+            subtype: "adult_tld".to_string(),
+            explanation: format!("Adult-content TLD '.{tld}'"),
+        });
+    }
+
+    let normalized_domain = normalize_obfuscated_token(&parsed.domain);
+    let host_substring_hit = ADULT_HOST_SUBSTRINGS
+        .iter()
+        .find(|keyword| normalized_domain.contains(*keyword));
+    let host_label_hit = host_substring_hit.is_none().then(|| {
+        ADULT_HOST_LABEL_TOKENS.iter().find(|token| {
+            host_labels(&parsed.domain).any(|label| label == **token)
+                || host_labels(&normalized_domain).any(|label| label == **token)
+        })
+    });
+    let cyrillic_hit = ADULT_HOST_CYRILLIC_SUBSTRINGS
+        .iter()
+        .find(|keyword| parsed.host_lower.contains(*keyword));
+    if let Some(keyword) = host_substring_hit
+        .or(host_label_hit.flatten())
+        .or(cyrillic_hit)
+    {
+        return Some(AdultContentUrl {
+            url: url.to_string(),
+            score: 0.75,
+            subtype: "adult_host_keyword".to_string(),
+            explanation: format!("Adult-content host keyword '{keyword}'"),
+        });
+    }
+
+    if let Some(path) = url_path_and_query(url) {
+        if let Some(keyword) = ADULT_PATH_SUBSTRINGS
+            .iter()
+            .find(|keyword| path.contains(*keyword))
+        {
+            return Some(AdultContentUrl {
+                url: url.to_string(),
+                score: 0.65,
+                subtype: "adult_path_keyword".to_string(),
+                explanation: format!("Adult-content path keyword '{keyword}'"),
+            });
+        }
+    }
+
+    None
+}
+
 fn normalize_obfuscated_token(token: &str) -> String {
     token
         .chars()
@@ -676,6 +818,55 @@ mod tests {
 
         assert!(checker.is_blocked("https://bücher.example/path"));
         assert!(checker.is_blocked("https://xn--bcher-kva.example/path"));
+    }
+
+    #[test]
+    fn adult_tld_is_categorized() {
+        let checker = UrlChecker::from_database(&PatternDatabase::default_mvp());
+        let hits = checker.find_adult_content_urls("check this out https://teens.xxx/free now");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].subtype, "adult_tld");
+        assert!(hits[0].score >= 0.85);
+    }
+
+    #[test]
+    fn adult_host_keywords_and_obfuscation_are_categorized() {
+        let checker = UrlChecker::from_database(&PatternDatabase::default_mvp());
+        for text in [
+            "look http://bestporn.example/gallery",
+            "look http://p0rn-hub.example/clips",
+            "join sex-chat.example now",
+            "фотки тут http://порно.example/новое",
+        ] {
+            let hits = checker.find_adult_content_urls(text);
+            assert_eq!(hits.len(), 1, "expected one hit for {text}");
+            assert_eq!(hits[0].subtype, "adult_host_keyword", "for {text}");
+        }
+    }
+
+    #[test]
+    fn adult_path_keyword_is_categorized_weaker() {
+        let checker = UrlChecker::from_database(&PatternDatabase::default_mvp());
+        let hits =
+            checker.find_adult_content_urls("mirror: https://files.example/nsfw/archive.zip");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].subtype, "adult_path_keyword");
+        assert!(hits[0].score < 0.75);
+    }
+
+    #[test]
+    fn benign_lookalike_hosts_are_not_categorized() {
+        let checker = UrlChecker::from_database(&PatternDatabase::default_mvp());
+        for text in [
+            "council site https://essex.gov.uk/services",
+            "middlesex.edu has the syllabus",
+            "recipe at https://nudeln.de/spaghetti",
+            "sussex.ac.uk campus map",
+            "https://support.apple.com/en-us/guide",
+        ] {
+            let hits = checker.find_adult_content_urls(text);
+            assert!(hits.is_empty(), "false positive for {text}: {hits:?}");
+        }
     }
 
     #[test]

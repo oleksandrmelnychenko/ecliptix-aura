@@ -551,6 +551,15 @@ pub fn augment_recommendation_for_reason_codes(
             .push(UiAction::SlowDownConversation);
     }
 
+    let has_adult_link = reason_codes
+        .iter()
+        .any(|code| code.starts_with("link.adult_content"));
+    if threat_type == ThreatType::Nsfw && has_adult_link {
+        recommendation
+            .ui_actions
+            .push(UiAction::ConfirmBeforeOpenLink);
+    }
+
     recommendation.ui_actions.sort();
     recommendation.ui_actions.dedup();
 }
