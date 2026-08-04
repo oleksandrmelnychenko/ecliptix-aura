@@ -793,7 +793,11 @@ pub fn decide_action_with_domain_overrides(
     protection_level: ProtectionLevel,
     reason_code: &str,
 ) -> (Action, ActionRecommendation) {
-    if is_propaganda_threat(threat_type) {
+    if threat_type == ThreatType::Nsfw
+        && reason_code.starts_with(crate::media::MEDIA_TRUST_GATE_REASON_PREFIX)
+    {
+        crate::action::media_trust_gate_action(score)
+    } else if is_propaganda_threat(threat_type) {
         propaganda_action_for_subtype(score, protection_level, reason_code)
     } else {
         decide_action_v2(threat_type, score, protection_level)

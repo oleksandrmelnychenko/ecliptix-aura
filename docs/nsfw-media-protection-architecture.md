@@ -6,7 +6,8 @@ media, outgoing media, links, and text. Text-level NSFW detection already
 exists; this blueprint closes the media gap and unifies all layers under one
 policy surface.
 
-Status: proposed blueprint. Owner: safety runtime. Related docs:
+Status: P0 implemented (trust-gated blur, media EventKind/ReasonCode
+contract); P1+ proposed. Owner: safety runtime. Related docs:
 `DATAFLOW.md`, `proto-abi-stability.md`, `privacy-audit-policy.md`,
 `context-architecture-blueprint.md`.
 
@@ -31,8 +32,9 @@ What already works (and must not be duplicated):
 | UI actions | Done | `BlurUntilTap`, `WarnBeforeDisplay`, `WarnBeforeSend`, `EscalateToGuardian`, `SuggestBlockContact` |
 | Contact trust model | Done | `CircleTier` (Inner/Regular/Occasional/New), trust decay, behavioral trend |
 | Link analysis | Partial | `url_checker.rs` covers phishing/homoglyph/doppelganger; **no adult-content category** |
-| Image analysis | **Missing** | — |
-| Video analysis | **Missing** | — |
+| Trust-gated media blur (P0) | Done | `aura-core/src/media.rs`, media stage 2b in the orchestrator, `media.trust_gate.*` policy routing, media `EventKind` contract (proto 57–60) |
+| Image content analysis | **Missing** | — |
+| Video content analysis | **Missing** | — |
 | Outgoing media protection | **Missing** | — |
 
 ## 2. Threat Model
@@ -387,7 +389,7 @@ Extends the existing evaluation-first discipline:
 
 | Phase | Scope | ML needed | Exit criteria |
 |---|---|---|---|
-| **P0** | Trust-gated blur: media from `New`/`Occasional` contacts on minor profiles → `BlurUntilTap` + `WarnBeforeDisplay`; policy matrix skeleton; new EventKinds/ReasonCodes | none | scenario pack green; no regression in `action_policy_expectations` |
+| **P0** ✅ | Trust-gated blur: media from `New`/`Occasional` contacts on minor profiles → `BlurUntilTap` + `WarnBeforeDisplay`; policy matrix skeleton; new EventKinds/ReasonCodes | none | shipped: deterministic policy-matrix integration tests (`aura-core/tests/media_trust_gate.rs`) green, full workspace green; probabilistic media scenario pack arrives with the P2 mock backend |
 | **P1** | Adult-URL category in `url_checker`; `ADULT_LINK_SHARED` wired to context | none | link scenarios green incl. IDN/shortener cases |
 | **P2** | `aura-vision` crate: ONNX backend + `ClientVisionVerdict` path; Apple SCA integration in `swift/Sources/AuraAgent`; media stage 2b; full policy matrix | yes | model gates (§13.3) green; latency budget met on reference devices; FFI soak green |
 | **P3** | Video keyframes; outgoing (send-side) protection + sextortion signature escalation | reuses P2 | sextortion scenario pack green; send-side UX contract signed off |

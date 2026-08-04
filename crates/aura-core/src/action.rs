@@ -322,7 +322,38 @@ pub fn decide_action_v2(
             )
         }
 
-        ThreatType::None | ThreatType::Nsfw | ThreatType::HateSpeech => {
+        ThreatType::Nsfw => {
+            let action = if score >= 0.85 {
+                Action::Block
+            } else if score >= 0.6 {
+                Action::Warn
+            } else if score >= 0.4 {
+                Action::Blur
+            } else {
+                decide_action(score, protection_level)
+            };
+            let parent_alert = if score >= 0.75 {
+                AlertPriority::Medium
+            } else {
+                AlertPriority::None
+            };
+            let follow_ups = if score >= 0.6 {
+                vec![FollowUpAction::ReviewContactProfile]
+            } else {
+                vec![]
+            };
+            (
+                action,
+                recommendation(
+                    parent_alert,
+                    follow_ups,
+                    false,
+                    ui_actions_for(threat_type, action, score, parent_alert),
+                ),
+            )
+        }
+
+        ThreatType::None | ThreatType::HateSpeech => {
             let action = decide_action(score, protection_level);
             let parent_alert = if score >= 0.7 {
                 AlertPriority::Medium
@@ -340,6 +371,26 @@ pub fn decide_action_v2(
             )
         }
     }
+}
+
+/// Precautionary policy for the media trust gate.
+///
+/// The gate blurs unverified media from low-trust contacts on minor profiles
+/// without any content classification, so the action never exceeds `Blur` and
+/// no guardian alert fires — nothing has confirmed the media is explicit.
+/// Contact-history escalation may still upgrade the result afterwards
+/// (upgrade-only composition).
+pub fn media_trust_gate_action(score: f32) -> (Action, ActionRecommendation) {
+    let mut ui_actions = vec![UiAction::BlurUntilTap, UiAction::WarnBeforeDisplay];
+    if score >= 0.5 {
+        ui_actions.push(UiAction::RestrictUnknownContact);
+    }
+    ui_actions.sort();
+    ui_actions.dedup();
+    (
+        Action::Blur,
+        recommendation(AlertPriority::None, vec![], false, ui_actions),
+    )
 }
 
 /// Determines action for propaganda detection with subtype awareness.
@@ -705,7 +756,18 @@ fn ui_actions_for(
             actions.push(UiAction::SuggestReport);
             actions.push(UiAction::RestrictUnknownContact);
         }
-        ThreatType::None | ThreatType::Nsfw | ThreatType::HateSpeech => {}
+        ThreatType::Nsfw => {
+            match action {
+                Action::Blur | Action::Warn | Action::Block => {
+                    actions.push(UiAction::BlurUntilTap);
+                }
+                Action::Allow | Action::Mark => {}
+            }
+            if score >= 0.6 {
+                actions.push(UiAction::SuggestReport);
+            }
+        }
+        ThreatType::None | ThreatType::HateSpeech => {}
     }
 
     if parent_alert >= AlertPriority::High {
