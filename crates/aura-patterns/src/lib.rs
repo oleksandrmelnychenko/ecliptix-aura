@@ -20,4 +20,4 @@ pub use routing::{
     event_kind_for_rule, is_shadowed_generic_coordinate_rule, military_threat_subtype,
     requires_ukraine_coordinate_validation, MilitaryPatternFamily, PatternEventKind,
 };
-pub use url_checker::{BlockedUrlMatch, SuspiciousUrl, UrlChecker};
+pub use url_checker::{AdultContentUrl, BlockedUrlMatch, SuspiciousUrl, UrlChecker};

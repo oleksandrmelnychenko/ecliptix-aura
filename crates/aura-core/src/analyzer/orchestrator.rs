@@ -404,6 +404,34 @@ impl Analyzer {
             observations.push(RawObservation::signal(signal));
         }
 
+        // Adult-link category (P1 of the NSFW media protection architecture):
+        // heuristic categorization protects minor profiles only — adult
+        // accounts keep unfiltered link behavior.
+        let minor_profile = matches!(
+            self.config.account_type,
+            AccountType::Child | AccountType::Teen
+        );
+        if minor_profile && self.is_detection_enabled(ThreatType::Nsfw) {
+            for finding in self.url_checker.find_adult_content_urls(text) {
+                let mut signal = DetectionSignal::pattern(
+                    ThreatType::Nsfw,
+                    finding.score,
+                    score_to_confidence(finding.score),
+                    "link.adult_content",
+                    finding.explanation,
+                );
+                signal.family = SignalFamily::Link;
+                signal = signal.with_threat_subtype(finding.subtype.clone());
+                observations.push(RawObservation::signal_with_event(
+                    signal,
+                    EventKind::AdultLinkShared,
+                    finding.score,
+                    Some(finding.subtype),
+                    content_hash,
+                ));
+            }
+        }
+
         PatternScanResult { observations }
     }
 
