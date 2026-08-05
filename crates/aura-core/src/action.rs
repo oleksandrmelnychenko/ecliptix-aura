@@ -375,6 +375,32 @@ pub fn decide_action_v2(
     }
 }
 
+/// Policy for an outgoing explicit-media attempt by a minor (P3 send-side).
+///
+/// The protected user is the sender, so the posture is pause-and-think, never
+/// punitive: warn before send and slow the conversation. Guardian escalation
+/// happens only under the sextortion signature (recent coercive pressure from
+/// the conversation partner), where the send is likely not voluntary.
+pub fn media_send_attempt_action(coerced: bool) -> (Action, ActionRecommendation) {
+    let mut ui_actions = vec![UiAction::WarnBeforeSend, UiAction::SlowDownConversation];
+    let (parent_alert, follow_ups) = if coerced {
+        ui_actions.push(UiAction::EscalateToGuardian);
+        ui_actions.push(UiAction::SuggestBlockContact);
+        (
+            AlertPriority::High,
+            vec![FollowUpAction::ReviewContactProfile],
+        )
+    } else {
+        (AlertPriority::None, vec![])
+    };
+    ui_actions.sort();
+    ui_actions.dedup();
+    (
+        Action::Warn,
+        recommendation(parent_alert, follow_ups, false, ui_actions),
+    )
+}
+
 /// Precautionary policy for the media trust gate.
 ///
 /// The gate blurs unverified media from low-trust contacts on minor profiles

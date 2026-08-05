@@ -19,7 +19,7 @@ impl Analyzer {
             raw_observations.extend(pattern_result.observations);
         }
 
-        if let Some(observation) = self.media_trust_gate_observation(input, None) {
+        if let Some(observation) = self.media_trust_gate_observation(input, None, None) {
             raw_observations.push(observation);
         }
 
@@ -147,7 +147,9 @@ impl Analyzer {
             raw_observations.extend(pattern_result.observations);
         }
 
-        if let Some(observation) = self.media_trust_gate_observation(input, content_hash) {
+        if let Some(observation) =
+            self.media_trust_gate_observation(input, content_hash, Some(timestamp_ms))
+        {
             raw_observations.push(observation);
         }
 
