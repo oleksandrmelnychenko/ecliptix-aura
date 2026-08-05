@@ -455,6 +455,12 @@ impl Analyzer {
         content_hash: Option<u64>,
         timestamp_ms: Option<u64>,
     ) -> Option<RawObservation> {
+        // Cheap gates first: the media stage only ever applies to image and
+        // video content, and text traffic dominates — skip the profiler
+        // lookup entirely for non-media messages.
+        if !matches!(input.content_type, ContentType::Image | ContentType::Video) {
+            return None;
+        }
         if !self.is_detection_enabled(ThreatType::Nsfw) {
             return None;
         }

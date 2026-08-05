@@ -190,11 +190,15 @@ fn send_attempt_output(
 }
 
 fn verdict_provider(input: &MessageInput) -> String {
-    input
+    // Provider is host-supplied text that lands in exported timeline state;
+    // cap it so a misbehaving host cannot inflate context memory.
+    const MAX_PROVIDER_CHARS: usize = 64;
+    let provider = input
         .client_vision_verdict
         .as_ref()
-        .map(|verdict| verdict.provider.clone())
-        .unwrap_or_default()
+        .map(|verdict| verdict.provider.as_str())
+        .unwrap_or_default();
+    provider.chars().take(MAX_PROVIDER_CHARS).collect()
 }
 
 fn explicit_media_output(

@@ -103,6 +103,75 @@
         }
       ],
       "reason": "Adds deterministic release evidence for exact Kids and Military policy packs, state ownership, and disabled Military temporal execution without changing detection, memory, policy, or product behavior."
+    },
+    {
+      "path": "/contracts/contract_evidence/files/0/bytes",
+      "classification": "structural_only",
+      "baseline": 42674,
+      "candidate": 44016,
+      "reason": "Additive protobuf contract growth for NSFW media protection (MediaVerdictClass enum, MediaInfo and ClientVisionVerdict messages, MessageInput fields 12-13, EventKind values 57-60). No existing field, tag, or message changed; release, pilot, and world-lifecycle baselines show zero behavioral drift. See docs/nsfw-media-protection-architecture.md."
+    },
+    {
+      "path": "/contracts/contract_evidence/files/0/sha256",
+      "classification": "structural_only",
+      "baseline": "c6d167ad0a2a5214930c50dae71fd3acc46f11999c5882feb5bea6a280a60d0f",
+      "candidate": "f7510b57afa326715450910ff06d17d0cf840d24e3bf34625fd2067a6d49fa80",
+      "reason": "Hash companion of the additive messenger.proto change approved above."
+    },
+    {
+      "path": "/workspace/package_count",
+      "classification": "structural_only",
+      "baseline": 21,
+      "candidate": 22,
+      "reason": "New aura-vision crate: media classification contract (verdict types, validation, VisionBackend trait, NoopBackend) for the NSFW media protection architecture P2."
+    },
+    {
+      "path": "/workspace/packages/20/internal_dependencies/0",
+      "classification": "structural_only",
+      "baseline": "aura-contracts",
+      "candidate": {
+        "$aura_missing": true
+      },
+      "reason": "Alphabetical workspace index shift caused by inserting aura-vision; aura-wire-relay moved from slot 20 to 21 with its dependencies intact."
+    },
+    {
+      "path": "/workspace/packages/20/manifest_path",
+      "classification": "structural_only",
+      "baseline": "crates/aura-wire-relay/Cargo.toml",
+      "candidate": "crates/aura-vision/Cargo.toml",
+      "reason": "Alphabetical workspace index shift caused by inserting aura-vision at slot 20."
+    },
+    {
+      "path": "/workspace/packages/20/name",
+      "classification": "structural_only",
+      "baseline": "aura-wire-relay",
+      "candidate": "aura-vision",
+      "reason": "Alphabetical workspace index shift caused by inserting aura-vision at slot 20."
+    },
+    {
+      "path": "/workspace/packages/21",
+      "classification": "structural_only",
+      "baseline": {
+        "$aura_missing": true
+      },
+      "candidate": {
+        "internal_dependencies": [
+          "aura-contracts"
+        ],
+        "manifest_path": "crates/aura-wire-relay/Cargo.toml",
+        "name": "aura-wire-relay",
+        "version": "0.2.0"
+      },
+      "reason": "aura-wire-relay re-indexed to slot 21 after aura-vision insertion; contents unchanged."
+    },
+    {
+      "path": "/workspace/packages/4/internal_dependencies/7",
+      "classification": "structural_only",
+      "baseline": {
+        "$aura_missing": true
+      },
+      "candidate": "aura-vision",
+      "reason": "aura-core gains the aura-vision dependency for the verdict-driven media stage (NSFW media protection P2)."
     }
   ]
 }
