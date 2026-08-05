@@ -83,6 +83,24 @@ fn child_image_from_unknown_contact_is_blurred() {
 }
 
 #[test]
+fn gif_and_sticker_from_unknown_contact_are_gated_like_images() {
+    for content_type in [ContentType::Gif, ContentType::Sticker] {
+        let mut analyzer = analyzer_for(AccountType::Child);
+        let result =
+            analyzer.analyze_with_context(&media_msg(content_type, "stranger_1", "dm"), 1_000);
+        assert_eq!(
+            result.action,
+            Action::Blur,
+            "{content_type:?} must be trust-gated"
+        );
+        assert!(result
+            .reason_codes
+            .iter()
+            .any(|code| code == MEDIA_TRUST_GATE_UNVERIFIED_INCOMING));
+    }
+}
+
+#[test]
 fn teen_video_from_unknown_contact_is_blurred_without_restrict() {
     let mut analyzer = analyzer_for(AccountType::Teen);
     let result =

@@ -335,6 +335,10 @@ core stays codec-free):
 - core aggregates per-frame verdicts: max-severity wins; ≥ 2 explicit frames
   or 1 explicit + 1 suggestive → `Explicit` at elevated confidence;
 - animated stickers/GIFs follow the same path with lower frame budget (≤ 3).
+  ✅ `CONTENT_TYPE_GIF` / `CONTENT_TYPE_STICKER` (proto 6–7) flow through the
+  full media stage (trust gate + verdict paths) like images; unknown future
+  content types fail closed as visual media at the FFI boundary instead of
+  silently bypassing protection as text.
 
 The existing batch entry point (`analyze_batch`) with atomic failure on
 malformed input is the natural carrier.

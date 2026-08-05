@@ -5,14 +5,14 @@
       "path": "/contracts/contract_evidence/files/0/bytes",
       "classification": "structural_only",
       "baseline": 42674,
-      "candidate": 44046,
-      "reason": "Additive protobuf contract growth for NSFW media protection (MediaVerdictClass enum, MediaInfo and ClientVisionVerdict messages, MessageInput fields 12-13, EventKind values 57-60, RUNTIME_MODALITY_IMAGE = 3). No existing field, tag, or message changed; release, pilot, and world-lifecycle baselines show zero behavioral drift. See docs/nsfw-media-protection-architecture.md."
+      "candidate": 44098,
+      "reason": "Additive protobuf contract growth for NSFW media protection (MediaVerdictClass enum, MediaInfo and ClientVisionVerdict messages, MessageInput fields 12-13, EventKind values 57-60, RUNTIME_MODALITY_IMAGE = 3, CONTENT_TYPE_GIF = 6 and CONTENT_TYPE_STICKER = 7). No existing field, tag, or message changed; release, pilot, and world-lifecycle baselines show zero behavioral drift. See docs/nsfw-media-protection-architecture.md."
     },
     {
       "path": "/contracts/contract_evidence/files/0/sha256",
       "classification": "structural_only",
       "baseline": "c6d167ad0a2a5214930c50dae71fd3acc46f11999c5882feb5bea6a280a60d0f",
-      "candidate": "2897cfdfb78eb5a46195fe8835e7bee7d6893d53b501e81e1bb137930c45a851",
+      "candidate": "fa4ff115b3c6841419900853a5424f2e8fc1daab59d19db01e3cae5a8ddfe288",
       "reason": "Hash companion of the additive messenger.proto change approved above."
     },
     {
@@ -26,7 +26,9 @@
       "path": "/workspace/packages/20/internal_dependencies/0",
       "classification": "structural_only",
       "baseline": "aura-contracts",
-      "candidate": { "$aura_missing": true },
+      "candidate": {
+        "$aura_missing": true
+      },
       "reason": "Alphabetical workspace index shift caused by inserting aura-vision; aura-wire-relay moved from slot 20 to 21 with its dependencies intact."
     },
     {
@@ -46,9 +48,13 @@
     {
       "path": "/workspace/packages/21",
       "classification": "structural_only",
-      "baseline": { "$aura_missing": true },
+      "baseline": {
+        "$aura_missing": true
+      },
       "candidate": {
-        "internal_dependencies": ["aura-contracts"],
+        "internal_dependencies": [
+          "aura-contracts"
+        ],
         "manifest_path": "crates/aura-wire-relay/Cargo.toml",
         "name": "aura-wire-relay",
         "version": "0.2.0"
@@ -58,7 +64,9 @@
     {
       "path": "/workspace/packages/4/internal_dependencies/7",
       "classification": "structural_only",
-      "baseline": { "$aura_missing": true },
+      "baseline": {
+        "$aura_missing": true
+      },
       "candidate": "aura-vision",
       "reason": "aura-core gains the aura-vision dependency for the verdict-driven media stage (NSFW media protection P2)."
     }

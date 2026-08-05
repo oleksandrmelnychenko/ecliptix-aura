@@ -110,7 +110,7 @@ pub(crate) fn media_stage_output(
     vision_backend: &dyn VisionBackend,
 ) -> Option<MediaStageOutput> {
     match input.content_type {
-        ContentType::Image | ContentType::Video => {}
+        ContentType::Image | ContentType::Video | ContentType::Gif | ContentType::Sticker => {}
         ContentType::Text | ContentType::Voice | ContentType::Url => return None,
     }
     if protected_account_id == Some(&*input.sender_id) {
