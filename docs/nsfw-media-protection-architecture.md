@@ -248,7 +248,7 @@ with `action_policy_expectations.json` when implemented):
 | Child | in | any | Explicit ≥ .8 | Block-render (BlurUntilTap non-dismissable) + EscalateToGuardian + SuggestBlockContact |
 | Child | in | New/Occasional | abstained (no model) | BlurUntilTap + WarnBeforeDisplay (fail closed) |
 | Teen | in | New | Explicit ≥ .8 | BlurUntilTap + WarnBeforeDisplay + SuggestReport |
-| Teen | in | Inner | Suggestive | WarnBeforeDisplay only |
+| Teen | in | Inner | Suggestive | soft Mark only (no UI action, no alert) |
 | Teen | out | any | Explicit ≥ .6 | WarnBeforeSend + SlowDownConversation; + EscalateToGuardian if sextortion signature active |
 | Adult | in | New | Explicit | BlurUntilTap (user-configurable off) |
 | Adult | in | Inner | Explicit | no action (consenting-adult negative controls stay green) |
@@ -399,6 +399,25 @@ Extends the existing evaluation-first discipline:
 
 P0 and P1 ship real protection with zero model risk and should not wait for
 P2.
+
+## 14a. Host Integration Requirements
+
+Send-side protection (§6.3, P3) depends on direction detection, and the only
+direction signal in the contract is `protected_account_id`:
+
+- **Hosts MUST bind `protected_account_id` before invoking pre-send
+  analysis.** Without the binding, an outgoing message is indistinguishable
+  from an incoming one: the minor's own explicit media would be treated as
+  `ExplicitMediaReceived` from a `New` contact — Block plus guardian alert —
+  which is exactly the punitive posture the send-side design forbids.
+- Client verdicts (`ClientVisionVerdict`) are computed on the protected
+  user's device by the host application. A remote peer cannot supply or
+  influence them; a compromised host is outside this threat model.
+- The generated Swift protobuf (`swift/Sources/AuraAgent/.../messenger.pb.swift`)
+  must be regenerated on macOS after the P2 contract changes:
+  `just swift-proto-generate` (protoc + protoc-gen-swift 1.38.1). The stale
+  file still compiles — the new fields are additive — but Swift clients
+  cannot populate `client_vision_verdict`/`media_info` until regeneration.
 
 ## 15. Risks & Open Questions
 
