@@ -6,7 +6,7 @@ description = "Core analysis engine for AURA protection system"
 
 [features]
 default = []
-onnx = ["aura-ml/onnx"]
+onnx = ["aura-ml/onnx", "aura-vision/onnx"]
 
 [dependencies]
 aura-contracts = { path = "../aura-contracts" }

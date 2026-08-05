@@ -10,7 +10,7 @@
 //! from low-trust contacts on minor profiles — the fail-closed path. Media
 //! bytes are never inspected here and never persisted.
 
-use aura_vision::{accept_client_verdict, MediaClass, MediaVerdict};
+use aura_vision::{accept_client_verdict, MediaClass, MediaVerdict, VerdictSource, VisionBackend};
 
 use crate::context::events::EventKind;
 use crate::types::{
@@ -107,48 +107,73 @@ pub(crate) fn media_stage_output(
     protected_account_id: Option<&str>,
     snapshot: Option<&ContactSnapshot>,
     coercion_pressure: bool,
+    vision_backend: &dyn VisionBackend,
 ) -> Option<MediaStageOutput> {
     match input.content_type {
         ContentType::Image | ContentType::Video => {}
         ContentType::Text | ContentType::Voice | ContentType::Url => return None,
     }
     if protected_account_id == Some(&*input.sender_id) {
-        return send_attempt_output(input, account_type, coercion_pressure);
+        return send_attempt_output(input, account_type, coercion_pressure, vision_backend);
     }
 
     let trusted = is_historically_trusted(snapshot);
 
-    if let Some(verdict) = input
-        .client_vision_verdict
-        .as_ref()
-        .and_then(accept_client_verdict)
-    {
-        if !verdict.abstained {
-            match verdict.class {
-                MediaClass::Explicit => {
-                    return explicit_media_output(input, account_type, trusted, &verdict);
-                }
-                MediaClass::Suggestive | MediaClass::Drawing => {
-                    return suggestive_media_output(input, account_type, trusted, &verdict);
-                }
-                MediaClass::Neutral => {
-                    if verdict.confidence >= NEUTRAL_RELEASE_CONFIDENCE {
-                        return None;
-                    }
-                    // Low-confidence Neutral: fall through to the trust gate.
-                }
-                MediaClass::Unclear => {}
+    if let Some(verdict) = resolve_media_verdict(input, vision_backend) {
+        match verdict.class {
+            MediaClass::Explicit => {
+                return explicit_media_output(input, account_type, trusted, &verdict);
             }
+            MediaClass::Suggestive | MediaClass::Drawing => {
+                return suggestive_media_output(input, account_type, trusted, &verdict);
+            }
+            MediaClass::Neutral => {
+                if verdict.confidence >= NEUTRAL_RELEASE_CONFIDENCE {
+                    return None;
+                }
+                // Low-confidence Neutral: fall through to the trust gate.
+            }
+            MediaClass::Unclear => {}
         }
     }
 
     trust_gate_output(input, account_type, snapshot, trusted)
 }
 
+/// Resolves the best available media verdict for this message.
+///
+/// A validated, non-abstaining client verdict (platform-native classifier)
+/// takes priority; otherwise the on-device backend classifies the supplied
+/// thumbnail bytes. Backend errors and abstentions resolve to `None` so
+/// policy fails closed into the trust gate.
+fn resolve_media_verdict(
+    input: &MessageInput,
+    vision_backend: &dyn VisionBackend,
+) -> Option<MediaVerdict> {
+    if let Some(client) = input
+        .client_vision_verdict
+        .as_ref()
+        .and_then(accept_client_verdict)
+    {
+        if !client.abstained {
+            return Some(client);
+        }
+    }
+    if let Some(bytes) = input.image_data.as_deref() {
+        if let Ok(verdict) = vision_backend.classify(bytes) {
+            if !verdict.abstained {
+                return Some(verdict);
+            }
+        }
+    }
+    None
+}
+
 fn send_attempt_output(
     input: &MessageInput,
     account_type: AccountType,
     coercion_pressure: bool,
+    vision_backend: &dyn VisionBackend,
 ) -> Option<MediaStageOutput> {
     // Adults' outgoing media is their business.
     match account_type {
@@ -156,13 +181,10 @@ fn send_attempt_output(
         AccountType::Adult => return None,
     }
     // Send-side protection needs a confirmed verdict; without one there is
-    // nothing to warn about (no on-device classifier yet), and suggestive
-    // content alone must not generate warnings for a minor's own messages.
-    let verdict = input
-        .client_vision_verdict
-        .as_ref()
-        .and_then(accept_client_verdict)?;
-    if verdict.abstained || verdict.class != MediaClass::Explicit {
+    // nothing to warn about, and suggestive content alone must not generate
+    // warnings for a minor's own messages.
+    let verdict = resolve_media_verdict(input, vision_backend)?;
+    if verdict.class != MediaClass::Explicit {
         return None;
     }
 
@@ -178,27 +200,40 @@ fn send_attempt_output(
         reason_code,
         "Outgoing explicit media detected before send",
     )
-    .with_threat_subtype("client_platform");
+    .with_threat_subtype(verdict_subtype(&verdict));
     Some(MediaStageOutput {
         signal,
         event: Some(MediaStageEvent {
             kind: EventKind::ExplicitMediaSendAttempt,
             confidence: verdict.confidence,
-            subtype: Some(verdict_provider(input)),
+            subtype: Some(verdict_source_label(input, &verdict)),
         }),
     })
 }
 
-fn verdict_provider(input: &MessageInput) -> String {
+/// Stable signal subtype naming the verdict source.
+fn verdict_subtype(verdict: &MediaVerdict) -> &'static str {
+    match verdict.source {
+        VerdictSource::ClientPlatform => "client_platform",
+        VerdictSource::OnDeviceModel => "on_device_model",
+        VerdictSource::PolicyOnly => "policy_only",
+    }
+}
+
+/// Event subtype identifying who produced the verdict.
+fn verdict_source_label(input: &MessageInput, verdict: &MediaVerdict) -> String {
     // Provider is host-supplied text that lands in exported timeline state;
     // cap it so a misbehaving host cannot inflate context memory.
     const MAX_PROVIDER_CHARS: usize = 64;
-    let provider = input
-        .client_vision_verdict
-        .as_ref()
-        .map(|verdict| verdict.provider.as_str())
-        .unwrap_or_default();
-    provider.chars().take(MAX_PROVIDER_CHARS).collect()
+    match verdict.source {
+        VerdictSource::ClientPlatform => input
+            .client_vision_verdict
+            .as_ref()
+            .map(|client| client.provider.chars().take(MAX_PROVIDER_CHARS).collect())
+            .unwrap_or_default(),
+        VerdictSource::OnDeviceModel => "core.onnx".to_string(),
+        VerdictSource::PolicyOnly => String::new(),
+    }
 }
 
 fn explicit_media_output(
@@ -227,13 +262,13 @@ fn explicit_media_output(
         MEDIA_VISION_EXPLICIT,
         "Classifier-confirmed explicit media",
     )
-    .with_threat_subtype("client_platform");
+    .with_threat_subtype(verdict_subtype(verdict));
     Some(MediaStageOutput {
         signal,
         event: Some(MediaStageEvent {
             kind: EventKind::ExplicitMediaReceived,
             confidence: verdict.confidence,
-            subtype: Some(verdict_provider(input)),
+            subtype: Some(verdict_source_label(input, verdict)),
         }),
     })
 }
@@ -267,13 +302,13 @@ fn suggestive_media_output(
         reason_code,
         "Classifier-flagged suggestive media",
     )
-    .with_threat_subtype("client_platform");
+    .with_threat_subtype(verdict_subtype(verdict));
     Some(MediaStageOutput {
         signal,
         event: Some(MediaStageEvent {
             kind: EventKind::SuggestiveMediaReceived,
             confidence: verdict.confidence,
-            subtype: Some(verdict_provider(input)),
+            subtype: Some(verdict_source_label(input, verdict)),
         }),
     })
 }
@@ -329,8 +364,15 @@ pub(crate) fn media_trust_gate_signal(
     protected_account_id: Option<&str>,
     snapshot: Option<&ContactSnapshot>,
 ) -> Option<DetectionSignal> {
-    media_stage_output(input, account_type, protected_account_id, snapshot, false)
-        .map(|output| output.signal)
+    media_stage_output(
+        input,
+        account_type,
+        protected_account_id,
+        snapshot,
+        false,
+        &aura_vision::NoopBackend,
+    )
+    .map(|output| output.signal)
 }
 
 #[cfg(test)]
