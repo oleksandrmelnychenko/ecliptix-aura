@@ -21,6 +21,7 @@ pub mod coordinate_leak;
 pub mod doxxing;
 pub mod explicit_threat;
 pub mod hate_speech;
+pub mod media_nsfw;
 pub mod military_social_eng;
 pub mod nsfw;
 pub mod opsec_violation;
@@ -81,6 +82,15 @@ pub fn pack_index() -> Vec<DetectorPack> {
             long_context: nsfw::long_context_nsfw_scenarios,
             false_positive: nsfw::false_positive_nsfw_scenarios,
             gates: nsfw::nsfw_quality_gates,
+        },
+        DetectorPack {
+            threat: ThreatType::Nsfw,
+            name: "media_nsfw",
+            canonical: media_nsfw::canonical_media_nsfw_scenarios,
+            adversarial: media_nsfw::adversarial_media_nsfw_scenarios,
+            long_context: media_nsfw::long_context_media_nsfw_scenarios,
+            false_positive: media_nsfw::false_positive_media_nsfw_scenarios,
+            gates: media_nsfw::media_nsfw_quality_gates,
         },
         DetectorPack {
             threat: ThreatType::PiiLeakage,

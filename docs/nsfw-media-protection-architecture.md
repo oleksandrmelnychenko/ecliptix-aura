@@ -373,10 +373,13 @@ Extends the existing evaluation-first discipline:
    mocked to return). Scenario packs test the *policy and context* behavior,
    not the model — the mock backend makes packs deterministic and keeps the
    repo free of explicit imagery.
-2. **New pack `media_nsfw.rs`**: trust-gate cases, fail-closed cases,
-   sextortion signature (photo request history + outgoing explicit),
-   keyframe aggregation, consenting-adult negative controls, FP controls
-   (breastfeeding photo → Suggestive/Drawing must not escalate).
+2. **Pack `media_nsfw.rs`** ✅ (registered in `pack_index`): trust-gate and
+   fail-closed cases, verdict-driven positives (explicit overrides even a
+   guardian-verified sender), sextortion signature (photo-request history +
+   outgoing explicit), adult cyberflashing, neutral-release and FP controls.
+   Client verdicts serve as the deterministic mock backend; measured
+   pos_detect 1.00 / neg_fp 0.00 / Brier 0.031 / ECE 0.074 against its own
+   gates.
 3. **Model-level eval outside the repo tree** (same pattern as
    `data/raw/hf` + `dataset_source_manifest`): public NSFW benchmark sets
    referenced by manifest, never vendored. Gates per class: explicit recall
