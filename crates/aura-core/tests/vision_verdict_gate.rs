@@ -111,6 +111,31 @@ fn confirmed_explicit_media_flags_even_trusted_contact_for_minor() {
 }
 
 #[test]
+fn explicit_sticker_verdict_is_flagged_like_image() {
+    let mut analyzer = analyzer_for(AccountType::Teen);
+    let mut input = media_msg("stranger_1", Some(verdict(MediaClass::Explicit, 0.9)));
+    input.content_type = ContentType::Sticker;
+    let result = analyzer.analyze_with_context(&input, 1_000);
+
+    assert_eq!(result.threat_type, ThreatType::Nsfw);
+    assert!(result.action >= Action::Warn);
+    assert!(result
+        .reason_codes
+        .iter()
+        .any(|code| code == "media.vision.explicit"));
+}
+
+#[test]
+fn neutral_gif_verdict_releases_gate() {
+    let mut analyzer = analyzer_for(AccountType::Child);
+    let mut input = media_msg("stranger_1", Some(verdict(MediaClass::Neutral, 0.95)));
+    input.content_type = ContentType::Gif;
+    let result = analyzer.analyze_with_context(&input, 1_000);
+
+    assert_eq!(result.action, Action::Allow);
+}
+
+#[test]
 fn suggestive_media_to_teen_is_blurred() {
     let mut analyzer = analyzer_for(AccountType::Teen);
     let result = analyzer.analyze_with_context(

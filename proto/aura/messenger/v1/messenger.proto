@@ -264,6 +264,8 @@ enum ContentType {
   CONTENT_TYPE_VOICE = 3;
   CONTENT_TYPE_VIDEO = 4;
   CONTENT_TYPE_URL = 5;
+  CONTENT_TYPE_GIF = 6;
+  CONTENT_TYPE_STICKER = 7;
 }
 
 enum EventKind {

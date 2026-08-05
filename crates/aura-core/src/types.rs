@@ -873,6 +873,10 @@ pub enum ContentType {
     Video,
     /// URL or link-only message.
     Url,
+    /// Animated GIF attachment.
+    Gif,
+    /// Sticker (static or animated).
+    Sticker,
 }
 
 // ── Media classification contract (source: aura-vision) ─────────────

@@ -899,12 +899,20 @@ pub(super) fn cultural_context_from_proto(
 }
 
 pub(super) fn content_type_from_proto(value: i32) -> aura_agent_core::ContentType {
-    match proto::ContentType::try_from(value).unwrap_or(proto::ContentType::Text) {
-        proto::ContentType::Image => aura_agent_core::ContentType::Image,
-        proto::ContentType::Voice => aura_agent_core::ContentType::Voice,
-        proto::ContentType::Video => aura_agent_core::ContentType::Video,
-        proto::ContentType::Url => aura_agent_core::ContentType::Url,
-        _ => aura_agent_core::ContentType::Text,
+    match proto::ContentType::try_from(value) {
+        Ok(proto::ContentType::Image) => aura_agent_core::ContentType::Image,
+        Ok(proto::ContentType::Voice) => aura_agent_core::ContentType::Voice,
+        Ok(proto::ContentType::Video) => aura_agent_core::ContentType::Video,
+        Ok(proto::ContentType::Url) => aura_agent_core::ContentType::Url,
+        Ok(proto::ContentType::Gif) => aura_agent_core::ContentType::Gif,
+        Ok(proto::ContentType::Sticker) => aura_agent_core::ContentType::Sticker,
+        Ok(proto::ContentType::Text) | Ok(proto::ContentType::Unspecified) => {
+            aura_agent_core::ContentType::Text
+        }
+        // Unknown future content types fail closed as visual media: a newer
+        // client's new media kind goes through the trust gate instead of
+        // silently bypassing media protection as text.
+        Err(_) => aura_agent_core::ContentType::Image,
     }
 }
 
