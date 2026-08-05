@@ -361,6 +361,7 @@ enum RuntimeModality {
   RUNTIME_MODALITY_UNSPECIFIED = 0;
   RUNTIME_MODALITY_TEXT = 1;
   RUNTIME_MODALITY_URL = 2;
+  RUNTIME_MODALITY_IMAGE = 3;
 }
 
 // Identity of an inference model that was successfully loaded.

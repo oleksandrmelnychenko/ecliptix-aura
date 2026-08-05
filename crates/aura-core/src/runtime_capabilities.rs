@@ -21,6 +21,8 @@ pub enum RuntimeBackend {
 pub enum RuntimeModality {
     Text,
     Url,
+    /// Image content analysis is active (an on-device vision model loaded).
+    Image,
 }
 
 /// Identity of a model that was successfully loaded.

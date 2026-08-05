@@ -156,13 +156,16 @@ pub trait VisionBackend: Send + Sync {
 
 Backends:
 
-- **`OnnxNsfwClassifier`** — behind a `onnx` cargo feature, reusing the same
-  `ort` (load-dynamic) dependency pattern as `aura-ml`. Input: RGB 224×224.
-  Output: per-class logits → per-class calibration (mirroring
-  `apply_calibration()` in the ML pipeline) → `MediaVerdict`.
-- **`NoopBackend`** — always abstains; forces the policy layer onto the
-  fail-closed path. Default when the feature is off or the model fails
-  integrity checks.
+- **`OnnxNsfwClassifier`** ✅ — behind the `onnx` cargo feature, reusing the
+  same `ort` (load-dynamic) dependency pattern as `aura-ml`. Load path:
+  read file → SHA-256 verify (optional pin) → in-memory session. Classify
+  path: byte cap (4MB) → decode (png/jpeg) → 224×224 resize →
+  ImageNet-normalized NCHW tensor → session → softmax over
+  `[neutral, suggestive, explicit, drawing, unclear]` → decision floor 0.55
+  (below it the verdict abstains). Awaiting the model artifact itself.
+- **`NoopBackend`** ✅ — always abstains; forces the policy layer onto the
+  fail-closed path. Default when the feature is off, no model file exists,
+  or the model fails to load/verify.
 
 Client platform verdicts (`client_vision_verdict` in the proto) are not a
 backend: they arrive pre-computed, are validated for range/enum sanity, and
@@ -396,7 +399,7 @@ Extends the existing evaluation-first discipline:
 |---|---|---|---|
 | **P0** ✅ | Trust-gated blur: media from `New`/`Occasional` contacts on minor profiles → `BlurUntilTap` + `WarnBeforeDisplay`; policy matrix skeleton; new EventKinds/ReasonCodes | none | shipped: deterministic policy-matrix integration tests (`aura-core/tests/media_trust_gate.rs`) green, full workspace green; probabilistic media scenario pack arrives with the P2 mock backend |
 | **P1** ✅ | Adult-URL category in `url_checker`; `ADULT_LINK_SHARED` wired to context | none | shipped: heuristic unit tests + integration tests (`aura-core/tests/adult_link_gate.rs`) green incl. IDN/Cyrillic hosts and benign look-alike negatives; minor profiles only |
-| **P2** 🔶 | `aura-vision` crate: ONNX backend + `ClientVisionVerdict` path; Apple SCA integration in `swift/Sources/AuraAgent`; media stage 2b; full policy matrix | yes | verdict plumbing shipped: `aura-vision` crate (verdict contract, validation, `NoopBackend`, `VisionBackend` trait), proto `MediaInfo`/`ClientVisionVerdict` (fields 12–13), verdict-driven media stage with `ExplicitMediaReceived`/`SuggestiveMediaReceived` events, trust-aware policy (`aura-core/tests/vision_verdict_gate.rs` green). Remaining: ONNX backend behind `onnx` feature (model gates §13.3, device latency budget), Swift SCA glue producing `ClientVisionVerdict`, FFI soak for `image_data` corpus |
+| **P2** 🔶 | `aura-vision` crate: ONNX backend + `ClientVisionVerdict` path; Apple SCA integration in `swift/Sources/AuraAgent`; media stage 2b; full policy matrix | yes | verdict plumbing shipped: `aura-vision` crate (verdict contract, validation, `NoopBackend`, `VisionBackend` trait), proto `MediaInfo`/`ClientVisionVerdict` (fields 12–13), verdict-driven media stage with `ExplicitMediaReceived`/`SuggestiveMediaReceived` events, trust-aware policy (`aura-core/tests/vision_verdict_gate.rs` green). ONNX backend implemented behind the `onnx` feature (`aura-vision/src/onnx.rs`): checksum-verified load, 4MB byte cap before decode, 224×224 ImageNet-normalized preprocessing, softmax + 0.55 decision floor, Noop fallback on any load failure, `RuntimeModality::Image` + `vision.nsfw_image` model identity reported only when a model actually loads. Remaining: the model artifact itself (gates §13.3, device latency budget) and Swift SCA glue producing `ClientVisionVerdict` |
 | **P3** 🔶 | Video keyframes; outgoing (send-side) protection + sextortion signature escalation | reuses P2 | send-side shipped: outgoing explicit-verdict media from a minor → `WarnBeforeSend` + `SlowDownConversation` (never punitive), guardian escalation only under the sextortion signature (48h timeline lookback for photo/secrecy/sexual/blackmail pressure from the partner), `ExplicitMediaSendAttempt` event recorded; per-keyframe verdict flow verified (`aura-core/tests/send_side_gate.rs` green). Remaining: client-side keyframe sampling contract in the Kotlin/Swift shims, cross-frame aggregation once the on-device classifier lands |
 | **P4** | PDQ known-material matching | list membership | legal/partnership sign-off; block-render path verified |
 

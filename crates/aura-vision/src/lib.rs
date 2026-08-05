@@ -102,6 +102,12 @@ pub enum VisionError {
     BackendUnavailable,
     /// The media bytes could not be decoded.
     DecodeFailed(String),
+    /// The model file failed to load.
+    ModelLoadFailed(String),
+    /// The model file does not match its expected checksum.
+    IntegrityMismatch,
+    /// Inference over decoded media failed.
+    InferenceFailed(String),
 }
 
 impl std::fmt::Display for VisionError {
@@ -109,6 +115,9 @@ impl std::fmt::Display for VisionError {
         match self {
             Self::BackendUnavailable => write!(f, "vision backend unavailable"),
             Self::DecodeFailed(reason) => write!(f, "media decode failed: {reason}"),
+            Self::ModelLoadFailed(reason) => write!(f, "vision model load failed: {reason}"),
+            Self::IntegrityMismatch => write!(f, "vision model checksum mismatch"),
+            Self::InferenceFailed(reason) => write!(f, "vision inference failed: {reason}"),
         }
     }
 }
@@ -133,6 +142,21 @@ pub trait VisionBackend: Send + Sync {
     /// Returns the backend identity for capability reporting.
     fn descriptor(&self) -> BackendDescriptor;
 }
+
+/// Hard cap on media bytes accepted by any backend. The client contract is a
+/// downscaled thumbnail (≤512px, ≤1MB recommended); anything above this cap
+/// is rejected before decoding.
+pub const MAX_MEDIA_BYTES: usize = 4 * 1024 * 1024;
+
+/// File name of the on-device NSFW image classifier inside the configured
+/// models directory.
+pub const NSFW_IMAGE_MODEL_FILE: &str = "nsfw_image.onnx";
+
+#[cfg(feature = "onnx")]
+mod onnx;
+
+#[cfg(feature = "onnx")]
+pub use onnx::OnnxNsfwClassifier;
 
 /// Backend that always abstains. Decode failures and missing models resolve
 /// to the same outcome: `Unclear`, abstained, policy fails closed.
