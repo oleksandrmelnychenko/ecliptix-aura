@@ -35,6 +35,16 @@ pub const MEDIA_VISION_SUGGESTIVE: &str = "media.vision.suggestive";
 /// Reason code for classifier-confirmed drawn/animated sexual content.
 pub const MEDIA_VISION_DRAWING: &str = "media.vision.drawing";
 
+/// Reason-code prefix for send-side (outgoing) explicit-media protection.
+pub const MEDIA_SEND_ATTEMPT_PREFIX: &str = "media.send_attempt";
+
+/// Reason code for an outgoing explicit-media attempt by a minor.
+pub const MEDIA_SEND_ATTEMPT_EXPLICIT: &str = "media.send_attempt.explicit";
+
+/// Reason code for an outgoing explicit-media attempt under recent coercive
+/// pressure from the conversation partner (the sextortion signature).
+pub const MEDIA_SEND_ATTEMPT_EXPLICIT_COERCED: &str = "media.send_attempt.explicit.coerced";
+
 /// Minimum confidence for a Neutral verdict to release the trust gate.
 const NEUTRAL_RELEASE_CONFIDENCE: f32 = 0.7;
 
@@ -76,30 +86,34 @@ fn is_historically_trusted(snapshot: Option<&ContactSnapshot>) -> bool {
 /// Runs the media stage for one message: verdict-driven classification when a
 /// validated verdict exists, the relationship trust gate otherwise.
 ///
-/// Common preconditions:
-/// - content is an image or video (`ContentType::Image` / `ContentType::Video`);
-/// - the sender is not the protected account itself (send-side protection is
-///   phase P3).
+/// Incoming media (verdict path, any profile): explicit media is flagged
+/// with trust-aware severity — a guardian-verified sender does NOT bypass a
+/// confirmed-explicit verdict, only the unverified gate. Suggestive/drawn
+/// content is flagged for minor profiles only. A confident Neutral verdict
+/// releases the trust gate.
 ///
-/// Verdict path (any profile): explicit media is flagged with trust-aware
-/// severity — a guardian-verified sender does NOT bypass a confirmed-explicit
-/// verdict, only the unverified gate. Suggestive/drawn content is flagged for
-/// minor profiles only. A confident Neutral verdict releases the trust gate.
+/// Incoming media (trust-gate path, minor profiles only): unverified media
+/// from a low-trust contact is blurred; absent history counts as `New` —
+/// fail closed.
 ///
-/// Trust-gate path (minor profiles only): unverified media from a low-trust
-/// contact is blurred; absent history counts as `New` — fail closed.
+/// Outgoing media (the protected account is the sender, minor profiles
+/// only): a confirmed-explicit verdict produces a pause-and-think
+/// `WarnBeforeSend` signal — never punitive — and escalates to a guardian
+/// only when `coercion_pressure` marks the sextortion signature (recent
+/// photo/secrecy/sexual pressure from the conversation partner).
 pub(crate) fn media_stage_output(
     input: &MessageInput,
     account_type: AccountType,
     protected_account_id: Option<&str>,
     snapshot: Option<&ContactSnapshot>,
+    coercion_pressure: bool,
 ) -> Option<MediaStageOutput> {
     match input.content_type {
         ContentType::Image | ContentType::Video => {}
         ContentType::Text | ContentType::Voice | ContentType::Url => return None,
     }
     if protected_account_id == Some(&*input.sender_id) {
-        return None;
+        return send_attempt_output(input, account_type, coercion_pressure);
     }
 
     let trusted = is_historically_trusted(snapshot);
@@ -129,6 +143,50 @@ pub(crate) fn media_stage_output(
     }
 
     trust_gate_output(input, account_type, snapshot, trusted)
+}
+
+fn send_attempt_output(
+    input: &MessageInput,
+    account_type: AccountType,
+    coercion_pressure: bool,
+) -> Option<MediaStageOutput> {
+    // Adults' outgoing media is their business.
+    match account_type {
+        AccountType::Child | AccountType::Teen => {}
+        AccountType::Adult => return None,
+    }
+    // Send-side protection needs a confirmed verdict; without one there is
+    // nothing to warn about (no on-device classifier yet), and suggestive
+    // content alone must not generate warnings for a minor's own messages.
+    let verdict = input
+        .client_vision_verdict
+        .as_ref()
+        .and_then(accept_client_verdict)?;
+    if verdict.abstained || verdict.class != MediaClass::Explicit {
+        return None;
+    }
+
+    let (reason_code, score) = if coercion_pressure {
+        (MEDIA_SEND_ATTEMPT_EXPLICIT_COERCED, 0.85)
+    } else {
+        (MEDIA_SEND_ATTEMPT_EXPLICIT, 0.65)
+    };
+    let signal = DetectionSignal::pattern(
+        ThreatType::Nsfw,
+        score,
+        Confidence::High,
+        reason_code,
+        "Outgoing explicit media detected before send",
+    )
+    .with_threat_subtype("client_platform");
+    Some(MediaStageOutput {
+        signal,
+        event: Some(MediaStageEvent {
+            kind: EventKind::ExplicitMediaSendAttempt,
+            confidence: verdict.confidence,
+            subtype: Some(verdict_provider(input)),
+        }),
+    })
 }
 
 fn verdict_provider(input: &MessageInput) -> String {
@@ -267,7 +325,7 @@ pub(crate) fn media_trust_gate_signal(
     protected_account_id: Option<&str>,
     snapshot: Option<&ContactSnapshot>,
 ) -> Option<DetectionSignal> {
-    media_stage_output(input, account_type, protected_account_id, snapshot)
+    media_stage_output(input, account_type, protected_account_id, snapshot, false)
         .map(|output| output.signal)
 }
 

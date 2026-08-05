@@ -442,14 +442,16 @@ impl Analyzer {
         self.analyze_staged(input)
     }
 
-    /// Returns the media-stage observation for incoming media, when applicable.
+    /// Returns the media-stage observation for a media message, when applicable.
     ///
     /// Verdict-driven classification (P2) when a validated client verdict is
-    /// present, relationship trust gate (P0) otherwise. See `crate::media`.
+    /// present, relationship trust gate (P0) otherwise; outgoing explicit
+    /// media triggers send-side protection (P3). See `crate::media`.
     fn media_trust_gate_observation(
         &self,
         input: &MessageInput,
         content_hash: Option<u64>,
+        timestamp_ms: Option<u64>,
     ) -> Option<RawObservation> {
         if !self.is_detection_enabled(ThreatType::Nsfw) {
             return None;
@@ -458,11 +460,13 @@ impl Analyzer {
             .context_tracker
             .contact_profiler()
             .snapshot(&input.sender_id);
+        let coercion_pressure = self.media_send_coercion_pressure(input, timestamp_ms);
         let output = crate::media::media_stage_output(
             input,
             self.config.account_type,
             self.config.protected_account_id.as_deref(),
             snapshot.as_ref(),
+            coercion_pressure,
         )?;
         Some(match output.event {
             Some(event) => RawObservation::signal_with_event(
@@ -473,6 +477,44 @@ impl Analyzer {
                 content_hash,
             ),
             None => RawObservation::signal(output.signal),
+        })
+    }
+
+    /// Detects the sextortion signature ahead of an outgoing media send: any
+    /// recent photo/secrecy/sexual/blackmail pressure event from another
+    /// participant in the same conversation.
+    fn media_send_coercion_pressure(
+        &self,
+        input: &MessageInput,
+        timestamp_ms: Option<u64>,
+    ) -> bool {
+        const COERCION_LOOKBACK_MS: u64 = 48 * 3600 * 1000;
+
+        let Some(now_ms) = timestamp_ms else {
+            return false;
+        };
+        let Some(protected_id) = self.config.protected_account_id.as_deref() else {
+            return false;
+        };
+        if input.sender_id.0 != protected_id {
+            return false;
+        }
+        let Some(timeline) = self.context_tracker.timeline(&input.conversation_id) else {
+            return false;
+        };
+        let since_ms = now_ms.saturating_sub(COERCION_LOOKBACK_MS);
+        timeline.events_since(since_ms).iter().any(|event| {
+            event.sender_id.0 != protected_id
+                && matches!(
+                    event.kind,
+                    EventKind::PhotoRequest
+                        | EventKind::SecrecyRequest
+                        | EventKind::SexualContent
+                        | EventKind::EmotionalBlackmail
+                        | EventKind::ReputationThreat
+                        | EventKind::ScreenshotThreat
+                        | EventKind::ExplicitMediaReceived
+                )
         })
     }
 
