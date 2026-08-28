@@ -1290,6 +1290,8 @@ mod tests {
             member_count: None,
             sender_relationship: Default::default(),
             relationship_trust_source: Default::default(),
+            media_info: None,
+            client_vision_verdict: None,
         }
     }
 
