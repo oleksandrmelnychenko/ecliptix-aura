@@ -779,6 +779,8 @@ fn run_world_simulation(
             content_type: aura_core::ContentType::Text,
             text: Some(event.text.clone()),
             image_data: None,
+            media_info: None,
+            client_vision_verdict: None,
             sender_id: event.sender_id.as_str().into(),
             conversation_id: event.conversation_id.as_str().into(),
             language: Some(event.language.clone()),

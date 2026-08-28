@@ -126,6 +126,8 @@ fn message_input_relationship_metadata_round_trip() {
         content_type: proto::ContentType::Text as i32,
         text: Some("hello".to_string()),
         image_data: None,
+        media_info: None,
+        client_vision_verdict: None,
         sender_id: "sender_1".to_string(),
         conversation_id: "conv_1".to_string(),
         language: Some("en".to_string()),

@@ -1107,7 +1107,17 @@ pub fn decide_action_with_domain_overrides(
     protection_level: ProtectionLevel,
     reason_code: &str,
 ) -> (Action, ActionRecommendation) {
-    if is_propaganda_threat(threat_type) {
+    if threat_type == ThreatType::Nsfw
+        && reason_code.starts_with(crate::media::MEDIA_TRUST_GATE_REASON_PREFIX)
+    {
+        crate::action::media_trust_gate_action(score)
+    } else if threat_type == ThreatType::Nsfw
+        && reason_code.starts_with(crate::media::MEDIA_SEND_ATTEMPT_PREFIX)
+    {
+        crate::action::media_send_attempt_action(
+            reason_code == crate::media::MEDIA_SEND_ATTEMPT_EXPLICIT_COERCED,
+        )
+    } else if is_propaganda_threat(threat_type) {
         propaganda_action_for_subtype(score, protection_level, reason_code)
     } else {
         decide_action_v2(threat_type, score, protection_level)
@@ -1280,6 +1290,8 @@ mod tests {
             member_count: None,
             sender_relationship: Default::default(),
             relationship_trust_source: Default::default(),
+            media_info: None,
+            client_vision_verdict: None,
         }
     }
 
@@ -1724,6 +1736,8 @@ mod tests {
             content_type: ContentType::Text,
             text: Some("don't tell your parents, this is our little secret".to_string()),
             image_data: None,
+            media_info: None,
+            client_vision_verdict: None,
             sender_id: SenderId::from("sender"),
             conversation_id: ConversationId::from("conv"),
             language: Some("en".to_string()),
@@ -1743,6 +1757,8 @@ mod tests {
             content_type: ContentType::Text,
             text: Some("Please complete this diia security update now.".to_string()),
             image_data: None,
+            media_info: None,
+            client_vision_verdict: None,
             sender_id: SenderId::from("sender"),
             conversation_id: ConversationId::from("conv"),
             language: Some("en".to_string()),

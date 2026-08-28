@@ -1,0 +1,24 @@
+[package]
+name = "aura-vision"
+version.workspace = true
+edition.workspace = true
+description = "On-device media classification contract and backends for AURA"
+
+[features]
+default = []
+# Enable the real ONNX Runtime image classifier. Without this, only the
+# verdict contract and the abstaining NoopBackend are available.
+onnx = ["ort", "ndarray", "image"]
+
+[dependencies]
+serde.workspace = true
+sha2.workspace = true
+tracing.workspace = true
+
+# ONNX Runtime — optional, only when `onnx` feature is enabled.
+ort = { version = "2.0.0-rc.12", features = ["load-dynamic", "ndarray"], optional = true }
+ndarray = { workspace = true, optional = true }
+image = { version = "0.25", default-features = false, features = [
+    "png",
+    "jpeg",
+], optional = true }

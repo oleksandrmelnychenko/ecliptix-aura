@@ -158,6 +158,7 @@ pub struct Analyzer {
     ml_pipeline: MlPipeline,
     escalation_tracker: EscalationTracker,
     domain_runtime: AuraDomainRuntime,
+    vision_backend: std::sync::Arc<dyn aura_vision::VisionBackend>,
 }
 
 impl Analyzer {
@@ -199,6 +200,8 @@ impl Analyzer {
             "AURA analyzer initialized"
         );
 
+        let vision_backend = Self::vision_backend(&config);
+
         Ok(Self {
             config,
             pattern_db: pattern_db.clone(),
@@ -212,7 +215,46 @@ impl Analyzer {
             ml_pipeline,
             escalation_tracker: EscalationTracker::new(),
             domain_runtime: AuraDomainRuntime::new(),
+            vision_backend,
         })
+    }
+
+    /// Builds the media classification backend for this configuration.
+    ///
+    /// With the `onnx` feature and a present `nsfw_image.onnx` under
+    /// `models_path`, the on-device classifier loads; any failure falls back
+    /// to the abstaining [`aura_vision::NoopBackend`], which keeps the media
+    /// stage on the fail-closed trust-gate path.
+    fn vision_backend(config: &AuraConfig) -> std::sync::Arc<dyn aura_vision::VisionBackend> {
+        #[cfg(feature = "onnx")]
+        if let Some(ref base_path) = config.models_path {
+            let model_path =
+                std::path::Path::new(base_path).join(aura_vision::NSFW_IMAGE_MODEL_FILE);
+            if model_path.exists() {
+                match aura_vision::OnnxNsfwClassifier::load(&model_path.to_string_lossy(), None) {
+                    Ok(backend) => {
+                        debug!(
+                            model = %model_path.display(),
+                            "vision backend loaded for on-device media classification"
+                        );
+                        return std::sync::Arc::new(backend);
+                    }
+                    Err(error) => {
+                        debug!(
+                            model = %model_path.display(),
+                            %error,
+                            "vision model failed to load; media stage stays on the fail-closed trust gate"
+                        );
+                    }
+                }
+            }
+        }
+        let _ = config;
+        std::sync::Arc::new(aura_vision::NoopBackend)
+    }
+
+    fn vision_backend_active(&self) -> bool {
+        self.vision_backend.descriptor().identifier != "noop"
     }
 
     fn tracker_config(config: &AuraConfig) -> TrackerConfig {
@@ -404,6 +446,34 @@ impl Analyzer {
             observations.push(RawObservation::signal(signal));
         }
 
+        // Adult-link category (P1 of the NSFW media protection architecture):
+        // heuristic categorization protects minor profiles only — adult
+        // accounts keep unfiltered link behavior.
+        let minor_profile = matches!(
+            self.config.account_type,
+            AccountType::Child | AccountType::Teen
+        );
+        if minor_profile && self.is_detection_enabled(ThreatType::Nsfw) {
+            for finding in self.url_checker.find_adult_content_urls(text) {
+                let mut signal = DetectionSignal::pattern(
+                    ThreatType::Nsfw,
+                    finding.score,
+                    score_to_confidence(finding.score),
+                    "link.adult_content",
+                    finding.explanation,
+                );
+                signal.family = SignalFamily::Link;
+                signal = signal.with_threat_subtype(finding.subtype.clone());
+                observations.push(RawObservation::signal_with_event(
+                    signal,
+                    EventKind::AdultLinkShared,
+                    finding.score,
+                    Some(finding.subtype),
+                    content_hash,
+                ));
+            }
+        }
+
         PatternScanResult { observations }
     }
 
@@ -414,6 +484,92 @@ impl Analyzer {
     /// never turns an accepted message into a clean result because of traffic volume.
     pub fn analyze(&mut self, input: &MessageInput) -> AnalysisResult {
         self.analyze_staged(input)
+    }
+
+    /// Returns the media-stage observation for a media message, when applicable.
+    ///
+    /// Verdict-driven classification (P2) when a validated client verdict is
+    /// present, relationship trust gate (P0) otherwise; outgoing explicit
+    /// media triggers send-side protection (P3). See `crate::media`.
+    fn media_trust_gate_observation(
+        &self,
+        input: &MessageInput,
+        content_hash: Option<u64>,
+        timestamp_ms: Option<u64>,
+    ) -> Option<RawObservation> {
+        // Cheap gates first: the media stage only ever applies to visual
+        // media, and text traffic dominates — skip the profiler lookup
+        // entirely for non-media messages.
+        if !matches!(
+            input.content_type,
+            ContentType::Image | ContentType::Video | ContentType::Gif | ContentType::Sticker
+        ) {
+            return None;
+        }
+        if !self.is_detection_enabled(ThreatType::Nsfw) {
+            return None;
+        }
+        let snapshot = self
+            .context_tracker
+            .contact_profiler()
+            .snapshot(&input.sender_id);
+        let coercion_pressure = self.media_send_coercion_pressure(input, timestamp_ms);
+        let output = crate::media::media_stage_output(
+            input,
+            self.config.account_type,
+            self.config.protected_account_id.as_deref(),
+            snapshot.as_ref(),
+            coercion_pressure,
+            self.vision_backend.as_ref(),
+        )?;
+        Some(match output.event {
+            Some(event) => RawObservation::signal_with_event(
+                output.signal,
+                event.kind,
+                event.confidence,
+                event.subtype,
+                content_hash,
+            ),
+            None => RawObservation::signal(output.signal),
+        })
+    }
+
+    /// Detects the sextortion signature ahead of an outgoing media send: any
+    /// recent photo/secrecy/sexual/blackmail pressure event from another
+    /// participant in the same conversation.
+    fn media_send_coercion_pressure(
+        &self,
+        input: &MessageInput,
+        timestamp_ms: Option<u64>,
+    ) -> bool {
+        const COERCION_LOOKBACK_MS: u64 = 48 * 3600 * 1000;
+
+        let Some(now_ms) = timestamp_ms else {
+            return false;
+        };
+        let Some(protected_id) = self.config.protected_account_id.as_deref() else {
+            return false;
+        };
+        if input.sender_id.0 != protected_id {
+            return false;
+        }
+        let Some(timeline) = self.context_tracker.timeline(&input.conversation_id) else {
+            return false;
+        };
+        let since_ms = now_ms.saturating_sub(COERCION_LOOKBACK_MS);
+        timeline.events_since(since_ms).iter().any(|event| {
+            event.sender_id.0 != protected_id
+                && matches!(
+                    event.kind,
+                    EventKind::PhotoRequest
+                        | EventKind::SecrecyRequest
+                        | EventKind::SexualContent
+                        | EventKind::EmotionalBlackmail
+                        | EventKind::ReputationThreat
+                        | EventKind::ScreenshotThreat
+                        | EventKind::ExplicitMediaReceived
+                )
+        })
     }
 
     /// Analyzes a message and updates conversation context with detected events at the given timestamp.
@@ -666,7 +822,7 @@ impl Analyzer {
             MlRuntimeBackend::RulesFallback => RuntimeBackend::RulesFallback,
             MlRuntimeBackend::Onnx => RuntimeBackend::Onnx,
         };
-        let models = self
+        let mut models: Vec<RuntimeModelIdentity> = self
             .ml_pipeline
             .loaded_models()
             .iter()
@@ -681,11 +837,22 @@ impl Analyzer {
             })
             .collect();
 
+        let mut supported_modalities = vec![RuntimeModality::Text, RuntimeModality::Url];
+        if self.vision_backend_active() {
+            supported_modalities.push(RuntimeModality::Image);
+            let descriptor = self.vision_backend.descriptor();
+            models.push(RuntimeModelIdentity {
+                component: "vision.nsfw_image".to_string(),
+                identifier: descriptor.identifier,
+                sha256: None,
+            });
+        }
+
         RuntimeCapabilities {
             schema_version: RUNTIME_CAPABILITIES_SCHEMA_VERSION.to_string(),
             runtime_version: env!("CARGO_PKG_VERSION").to_string(),
             backend,
-            supported_modalities: vec![RuntimeModality::Text, RuntimeModality::Url],
+            supported_modalities,
             models,
             policy_schema_version: PRODUCT_POLICY_SCHEMA_VERSION.to_string(),
             product_schema_version: PRODUCT_DECISION_SURFACE_SCHEMA_VERSION.to_string(),
@@ -832,6 +999,7 @@ impl Analyzer {
         let tracker_config = Self::tracker_config(&config);
         let signal_enricher = Self::signal_enricher(&config);
         let ml_pipeline = MlPipeline::new(Self::ml_config(&config));
+        self.vision_backend = Self::vision_backend(&config);
         self.pattern_db = pattern_db.clone();
         self.supported_pattern_languages = collect_supported_pattern_languages(pattern_db);
         self.pattern_matchers = HashMap::from([(

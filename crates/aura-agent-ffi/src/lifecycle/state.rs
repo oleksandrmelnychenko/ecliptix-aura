@@ -74,6 +74,42 @@ pub(super) fn decoded_config_from_proto(
     })
 }
 
+fn media_info_from_proto(info: proto::MediaInfo) -> aura_agent_core::types::MediaInfo {
+    aura_agent_core::types::MediaInfo {
+        width: info.width,
+        height: info.height,
+        mime_type: info.mime_type,
+        original_size_bytes: info.original_size_bytes,
+        keyframe_index: info.keyframe_index,
+        keyframe_count: info.keyframe_count,
+    }
+}
+
+fn media_verdict_class_from_proto(value: i32) -> aura_agent_core::types::MediaClass {
+    use aura_agent_core::types::MediaClass;
+    match proto::MediaVerdictClass::try_from(value).unwrap_or(proto::MediaVerdictClass::Unspecified)
+    {
+        proto::MediaVerdictClass::Neutral => MediaClass::Neutral,
+        proto::MediaVerdictClass::Suggestive => MediaClass::Suggestive,
+        proto::MediaVerdictClass::Explicit => MediaClass::Explicit,
+        proto::MediaVerdictClass::Drawing => MediaClass::Drawing,
+        // Unknown values fail closed as Unclear (abstain downstream).
+        proto::MediaVerdictClass::Unclear | proto::MediaVerdictClass::Unspecified => {
+            MediaClass::Unclear
+        }
+    }
+}
+
+fn client_vision_verdict_from_proto(
+    verdict: proto::ClientVisionVerdict,
+) -> aura_agent_core::types::ClientVisionVerdict {
+    aura_agent_core::types::ClientVisionVerdict {
+        class: media_verdict_class_from_proto(verdict.verdict_class),
+        confidence: verdict.confidence,
+        provider: verdict.provider,
+    }
+}
+
 pub(super) fn message_input_from_proto(
     message: proto::MessageInput,
 ) -> Result<MessageInput, String> {
@@ -81,6 +117,10 @@ pub(super) fn message_input_from_proto(
         content_type: content_type_from_proto(message.content_type),
         text: message.text,
         image_data: message.image_data,
+        media_info: message.media_info.map(media_info_from_proto),
+        client_vision_verdict: message
+            .client_vision_verdict
+            .map(client_vision_verdict_from_proto),
         sender_id: aura_agent_core::SenderId::from(validate_ffi_identifier(
             "message sender id",
             message.sender_id,
@@ -859,12 +899,20 @@ pub(super) fn cultural_context_from_proto(
 }
 
 pub(super) fn content_type_from_proto(value: i32) -> aura_agent_core::ContentType {
-    match proto::ContentType::try_from(value).unwrap_or(proto::ContentType::Text) {
-        proto::ContentType::Image => aura_agent_core::ContentType::Image,
-        proto::ContentType::Voice => aura_agent_core::ContentType::Voice,
-        proto::ContentType::Video => aura_agent_core::ContentType::Video,
-        proto::ContentType::Url => aura_agent_core::ContentType::Url,
-        _ => aura_agent_core::ContentType::Text,
+    match proto::ContentType::try_from(value) {
+        Ok(proto::ContentType::Image) => aura_agent_core::ContentType::Image,
+        Ok(proto::ContentType::Voice) => aura_agent_core::ContentType::Voice,
+        Ok(proto::ContentType::Video) => aura_agent_core::ContentType::Video,
+        Ok(proto::ContentType::Url) => aura_agent_core::ContentType::Url,
+        Ok(proto::ContentType::Gif) => aura_agent_core::ContentType::Gif,
+        Ok(proto::ContentType::Sticker) => aura_agent_core::ContentType::Sticker,
+        Ok(proto::ContentType::Text) | Ok(proto::ContentType::Unspecified) => {
+            aura_agent_core::ContentType::Text
+        }
+        // Unknown future content types fail closed as visual media: a newer
+        // client's new media kind goes through the trust gate instead of
+        // silently bypassing media protection as text.
+        Err(_) => aura_agent_core::ContentType::Image,
     }
 }
 
@@ -1066,6 +1114,10 @@ pub(super) fn event_kind_from_proto(value: i32) -> Result<CoreEventKind, String>
         proto::EventKind::IntelGathering => Ok(CoreEventKind::IntelGathering),
         proto::EventKind::MilitaryPhishing => Ok(CoreEventKind::MilitaryPhishing),
         proto::EventKind::MilitaryDisinfo => Ok(CoreEventKind::MilitaryDisinfo),
+        proto::EventKind::ExplicitMediaReceived => Ok(CoreEventKind::ExplicitMediaReceived),
+        proto::EventKind::ExplicitMediaSendAttempt => Ok(CoreEventKind::ExplicitMediaSendAttempt),
+        proto::EventKind::SuggestiveMediaReceived => Ok(CoreEventKind::SuggestiveMediaReceived),
+        proto::EventKind::AdultLinkShared => Ok(CoreEventKind::AdultLinkShared),
         proto::EventKind::Unspecified => Err("unspecified event kind in state".to_string()),
     }
 }
@@ -1128,5 +1180,9 @@ pub(super) fn proto_event_kind(value: CoreEventKind) -> proto::EventKind {
         CoreEventKind::IntelGathering => proto::EventKind::IntelGathering,
         CoreEventKind::MilitaryPhishing => proto::EventKind::MilitaryPhishing,
         CoreEventKind::MilitaryDisinfo => proto::EventKind::MilitaryDisinfo,
+        CoreEventKind::ExplicitMediaReceived => proto::EventKind::ExplicitMediaReceived,
+        CoreEventKind::ExplicitMediaSendAttempt => proto::EventKind::ExplicitMediaSendAttempt,
+        CoreEventKind::SuggestiveMediaReceived => proto::EventKind::SuggestiveMediaReceived,
+        CoreEventKind::AdultLinkShared => proto::EventKind::AdultLinkShared,
     }
 }

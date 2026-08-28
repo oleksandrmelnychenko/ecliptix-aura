@@ -437,6 +437,16 @@ pub enum EventKind {
     MilitaryPhishing,
     /// Military disinformation spreading.
     MilitaryDisinfo,
+
+    // --- NSFW media protection ---
+    /// Sexually explicit media received by the protected user.
+    ExplicitMediaReceived,
+    /// Protected user attempted to send sexually explicit media.
+    ExplicitMediaSendAttempt,
+    /// Suggestive (non-explicit) media received by the protected user.
+    SuggestiveMediaReceived,
+    /// Adult-content link shared into the conversation.
+    AdultLinkShared,
 }
 
 impl EventKind {
@@ -498,7 +508,11 @@ impl EventKind {
             | Self::PsyopsPattern
             | Self::IntelGathering
             | Self::MilitaryPhishing
-            | Self::MilitaryDisinfo => false,
+            | Self::MilitaryDisinfo
+            | Self::ExplicitMediaReceived
+            | Self::ExplicitMediaSendAttempt
+            | Self::SuggestiveMediaReceived
+            | Self::AdultLinkShared => false,
         }
     }
 
@@ -560,7 +574,11 @@ impl EventKind {
             | Self::PsyopsPattern
             | Self::IntelGathering
             | Self::MilitaryPhishing
-            | Self::MilitaryDisinfo => false,
+            | Self::MilitaryDisinfo
+            | Self::ExplicitMediaReceived
+            | Self::ExplicitMediaSendAttempt
+            | Self::SuggestiveMediaReceived
+            | Self::AdultLinkShared => false,
         }
     }
 
@@ -622,7 +640,11 @@ impl EventKind {
             | Self::PsyopsPattern
             | Self::IntelGathering
             | Self::MilitaryPhishing
-            | Self::MilitaryDisinfo => false,
+            | Self::MilitaryDisinfo
+            | Self::ExplicitMediaReceived
+            | Self::ExplicitMediaSendAttempt
+            | Self::SuggestiveMediaReceived
+            | Self::AdultLinkShared => false,
         }
     }
 
@@ -684,7 +706,11 @@ impl EventKind {
             | Self::PsyopsPattern
             | Self::IntelGathering
             | Self::MilitaryPhishing
-            | Self::MilitaryDisinfo => false,
+            | Self::MilitaryDisinfo
+            | Self::ExplicitMediaReceived
+            | Self::ExplicitMediaSendAttempt
+            | Self::SuggestiveMediaReceived
+            | Self::AdultLinkShared => false,
         }
     }
 
@@ -760,6 +786,11 @@ impl EventKind {
             Self::PsyopsPattern => 0.7,
             Self::IntelGathering => 0.8,
             Self::MilitaryPhishing => 0.85,
+
+            Self::ExplicitMediaReceived => 0.85,
+            Self::ExplicitMediaSendAttempt => 0.8,
+            Self::SuggestiveMediaReceived => 0.5,
+            Self::AdultLinkShared => 0.6,
         }
     }
 
@@ -790,7 +821,9 @@ impl EventKind {
             | Self::FakeVulnerability
             | Self::DoxxingAttempt
             | Self::HateSpeech
-            | Self::LocationRequest => true,
+            | Self::LocationRequest
+            | Self::ExplicitMediaReceived
+            | Self::AdultLinkShared => true,
             Self::Flattery
             | Self::GiftOffer
             | Self::SecrecyRequest
@@ -815,7 +848,9 @@ impl EventKind {
             | Self::PositionLeak
             | Self::UnitInfoLeak
             | Self::EquipmentLeak
-            | Self::CoordinateMention => false,
+            | Self::CoordinateMention
+            | Self::ExplicitMediaSendAttempt
+            | Self::SuggestiveMediaReceived => false,
             Self::PropagandaNarrative
             | Self::SuspiciousSource
             | Self::PsyopsPattern
@@ -883,7 +918,11 @@ impl EventKind {
             | Self::PsyopsPattern
             | Self::IntelGathering
             | Self::MilitaryPhishing
-            | Self::MilitaryDisinfo => false,
+            | Self::MilitaryDisinfo
+            | Self::ExplicitMediaReceived
+            | Self::ExplicitMediaSendAttempt
+            | Self::SuggestiveMediaReceived
+            | Self::AdultLinkShared => false,
         }
     }
 
@@ -1130,6 +1169,10 @@ mod tests {
             EventKind::IntelGathering,
             EventKind::MilitaryPhishing,
             EventKind::MilitaryDisinfo,
+            EventKind::ExplicitMediaReceived,
+            EventKind::ExplicitMediaSendAttempt,
+            EventKind::SuggestiveMediaReceived,
+            EventKind::AdultLinkShared,
         ];
         for kind in all_kinds {
             let sev = kind.severity();

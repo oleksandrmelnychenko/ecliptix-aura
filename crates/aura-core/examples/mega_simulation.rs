@@ -217,6 +217,8 @@ fn run_scenario(analyzer: &mut Analyzer, num: usize, scenario: &Scenario, stats:
             content_type: ContentType::Text,
             text: Some(msg.text.to_string()),
             image_data: None,
+            media_info: None,
+            client_vision_verdict: None,
             sender_id: msg.sender.into(),
             conversation_id: msg.conv.into(),
             language: Some(msg.lang.to_string()),

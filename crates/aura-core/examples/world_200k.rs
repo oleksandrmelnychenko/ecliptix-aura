@@ -969,6 +969,8 @@ fn main() {
                 content_type: ContentType::Text,
                 text: Some(text.to_string()),
                 image_data: None,
+                media_info: None,
+                client_vision_verdict: None,
                 sender_id: sender_id.into(),
                 conversation_id: conv_id.into(),
                 language: Some(child.lang.to_string()),

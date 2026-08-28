@@ -305,6 +305,7 @@ pub(crate) fn runtime_capabilities_to_proto(
             .map(|modality| match modality {
                 RuntimeModality::Text => proto::RuntimeModality::Text as i32,
                 RuntimeModality::Url => proto::RuntimeModality::Url as i32,
+                RuntimeModality::Image => proto::RuntimeModality::Image as i32,
             })
             .collect(),
         models: capabilities

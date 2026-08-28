@@ -626,6 +626,8 @@ fn build_curated_scenario_case(case: &CuratedCorpusCase) -> ScenarioCase {
                 content_type: ContentType::Text,
                 text: Some(message.text.clone()),
                 image_data: None,
+                media_info: None,
+                client_vision_verdict: None,
                 sender_id: SenderId::from(
                     message
                         .sender_id

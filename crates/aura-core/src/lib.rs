@@ -41,6 +41,7 @@ pub mod eval_scenarios;
 pub mod eval_simulation_regression;
 pub mod eval_social_context;
 pub mod ids;
+pub mod media;
 pub mod pilot;
 pub mod pilot_gate;
 pub mod product;
